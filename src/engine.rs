@@ -33,17 +33,34 @@ impl BitBoardGame {
     }
 }
 
-/// Produces a bitboard where 1 is set true if a knight
-/// at pos can attack the space.
-/// TODO: precompute this in a table
+/// Calculates an attacking board, a bitboard where 1 is set true if the piece
+/// at pos can attack the space. The attacking board is calculated using offsets
+/// (spaces the piece can attack relative to pos)
+/// so this is viable for Knight, Pawn and King (jumping, not gliding pieces).
 /// As this will be precomputed and stored in a table, it does not matter too much
 /// how efficient it is.
-fn knight_attack_board(pos: Position) -> BitBoard {
+/// Offsets are saved as (row,col).
+fn offset_attack_board<'a>(
+    pos: Position,
+    offsets: impl Iterator<Item = &'a (i16, i16)>,
+) -> BitBoard {
     // A board that has a 1 at position pos
     let mut res = BitBoard::empty();
     let (row_u, col_u) = pos_to_row_col(pos);
     let (row, col) = (row_u as i16, col_u as i16);
-    for (off_row, off_col) in &[
+    for (off_row, off_col) in offsets {
+        let new_row = row + off_row;
+        let new_col = col + off_col;
+        if new_row < 8 && new_row >= 0 && new_col < 8 && new_col >= 0 {
+            res = res ^ BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8));
+        }
+    }
+    res
+}
+
+/// TODO: precompute this in a table
+fn knight_attack_board(pos: Position) -> BitBoard {
+    static KNIGHT_OFFSETS: [(i16, i16); 8] = [
         (1, 2),
         (2, 1),
         (-1, 2),
@@ -52,14 +69,35 @@ fn knight_attack_board(pos: Position) -> BitBoard {
         (-2, 1),
         (-1, -2),
         (-2, -1),
-    ] {
-        let new_row = row + off_row;
-        let new_col = col + off_col;
-        if new_row < 8 && new_row >= 0 && new_col < 8 && new_col >= 0 {
-            res = res ^ BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8));
-        }
-    }
-    res
+    ];
+    offset_attack_board(pos, KNIGHT_OFFSETS.iter())
+}
+
+/// TODO: precompute this in a table
+fn king_attack_board(pos: Position) -> BitBoard {
+    static KING_OFFSETS: [(i16, i16); 8] = [
+        (0, 1),
+        (1, 0),
+        (0, -1),
+        (-1, 0),
+        (1, 1),
+        (-1, -1),
+        (-1, 1),
+        (1, -1),
+    ];
+    offset_attack_board(pos, KING_OFFSETS.iter())
+}
+
+/// TODO: precompute this in a table
+fn white_pawn_attack_board(pos: Position) -> BitBoard {
+    static PAWN_OFFSETS: [(i16, i16); 2] = [(-1, -1), (-1, 1)];
+    offset_attack_board(pos, PAWN_OFFSETS.iter())
+}
+
+/// TODO: precompute this in a table
+fn black_pawn_attack_board(pos: Position) -> BitBoard {
+    static PAWN_OFFSETS: [(i16, i16); 2] = [(1, -1), (1, 1)];
+    offset_attack_board(pos, PAWN_OFFSETS.iter())
 }
 
 // TODO: remove
@@ -102,6 +140,31 @@ mod tests {
         assert_eq!(
             knight_attack_board(27),
             BitBoard::from(0b0000000000101000010001000000000001000100001010000000000000000000)
+        );
+    }
+
+    #[test]
+    fn test_king_attack_board() {
+        assert_eq!(
+            king_attack_board(0),
+            BitBoard::from(0b0100000011000000000000000000000000000000000000000000000000000000)
+        );
+        assert_eq!(
+            king_attack_board(27),
+            BitBoard::from(0b0000000000000000001110000010100000111000000000000000000000000000)
+        );
+    }
+
+    #[test]
+    fn test_pawn_attack_board() {
+        assert_eq!(white_pawn_attack_board(62), BitBoard::from(0b10100000000));
+        assert_eq!(
+            black_pawn_attack_board(1),
+            BitBoard::from(0b0000000010100000000000000000000000000000000000000000000000000000)
+        );
+        assert_eq!(
+            black_pawn_attack_board(0),
+            BitBoard::from(0b0000000001000000000000000000000000000000000000000000000000000000)
         );
     }
 }

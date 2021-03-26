@@ -263,7 +263,7 @@ impl Display for BitBoard {
 impl fmt::Debug for BitBoard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // makes for nicer messages in rust asserts
-        write!(f, "\n");
+        write!(f, "\n")?;
         fmt::Display::fmt(self, f)
     }
 }
