@@ -12,10 +12,10 @@ const BOARD_SIZE: u8 = 8;
 // GENERAL PLAN
 // The program shall consist of the following parts:
 // START:
-// * Board Representation – BitBox and MailBox
+// ✓ Board Representation – BitBox and MailBox
 // * Simple CLI for interactive play. Shall include:
-//   * Print Board state
-//   * Make Move, update state
+//   ✓ Print Board state
+//   ✓ Make Move, update state
 //   Advanced:
 //   * Check legality of move
 //
@@ -290,6 +290,19 @@ impl BitBoard {
         x ^= t ^ (t >> 9);
         x.into()
     }
+
+    /// Moves a piece on the board. Does NOT check whether the move is legal (i.e.
+    /// the start position is indeed occupied, the end position unoccupied).
+    /// If the move is not legal, this function makes no guarantees on the obtained
+    /// bitboard.
+    /// Positions by definition start from left to right, so for
+    /// 0b10100
+    /// we would index
+    ///   01234
+    fn make_move(&self, start: Position, end: Position) -> BitBoard {
+        // Move implemented via flipping the bits and start and end position
+        (self.0 ^ (0x8000000000000000u64 >> start) ^ (0x8000000000000000u64 >> end)).into()
+    }
 }
 
 impl From<u64> for BitBoard {
@@ -321,35 +334,10 @@ struct BitBoardGame {
 }
 
 impl Game for BitBoardGame {
-    fn make_move(&mut self, start: Position, end: Position) {}
-}
-
-impl Display for BitBoardGame {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.state_as_mailbox()
-            .expect("Board was in an invalid state")
-            .fmt(f)
-    }
-}
-
-impl BitBoardGame {
-    fn state_as_mailbox(&self) -> ChessResult<MailboxBoard> {
-        use Piece::*;
-
-        let mut res = MailboxBoard::empty();
-        res.add_bitboard(&self.white_pieces.pawns, Piece::PawnWhite)?;
-        res.add_bitboard(&self.white_pieces.knights, Piece::KnightWhite)?;
-        res.add_bitboard(&self.white_pieces.bishops, Piece::BishopWhite)?;
-        res.add_bitboard(&self.white_pieces.rooks, Piece::RookWhite)?;
-        res.add_bitboard(&self.white_pieces.queens, Piece::QueenWhite)?;
-        res.add_bitboard(&self.white_pieces.kings, Piece::KingWhite)?;
-        res.add_bitboard(&self.black_pieces.pawns, Piece::PawnBlack)?;
-        res.add_bitboard(&self.black_pieces.knights, Piece::KnightBlack)?;
-        res.add_bitboard(&self.black_pieces.bishops, Piece::BishopBlack)?;
-        res.add_bitboard(&self.black_pieces.rooks, Piece::RookBlack)?;
-        res.add_bitboard(&self.black_pieces.queens, Piece::QueenBlack)?;
-        res.add_bitboard(&self.black_pieces.kings, Piece::KingBlack)?;
-        Ok(res)
+    // This could be reimplemeted with specialized move functions for each piece later.
+    fn make_move(&mut self, piece: Piece, start: Position, end: Position) {
+        let b = self.get_pieceboard(piece);
+        *b = b.make_move(start, end);
     }
 
     /// Returns a game with the figures placed on standard chess starting positions
@@ -395,6 +383,54 @@ impl BitBoardGame {
     }
 }
 
+impl Display for BitBoardGame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.state_as_mailbox()
+            .expect("Board was in an invalid state")
+            .fmt(f)
+    }
+}
+
+impl BitBoardGame {
+    fn state_as_mailbox(&self) -> ChessResult<MailboxBoard> {
+        use Piece::*;
+
+        let mut res = MailboxBoard::empty();
+        res.add_bitboard(&self.white_pieces.pawns, Piece::PawnWhite)?;
+        res.add_bitboard(&self.white_pieces.knights, Piece::KnightWhite)?;
+        res.add_bitboard(&self.white_pieces.bishops, Piece::BishopWhite)?;
+        res.add_bitboard(&self.white_pieces.rooks, Piece::RookWhite)?;
+        res.add_bitboard(&self.white_pieces.queens, Piece::QueenWhite)?;
+        res.add_bitboard(&self.white_pieces.kings, Piece::KingWhite)?;
+        res.add_bitboard(&self.black_pieces.pawns, Piece::PawnBlack)?;
+        res.add_bitboard(&self.black_pieces.knights, Piece::KnightBlack)?;
+        res.add_bitboard(&self.black_pieces.bishops, Piece::BishopBlack)?;
+        res.add_bitboard(&self.black_pieces.rooks, Piece::RookBlack)?;
+        res.add_bitboard(&self.black_pieces.queens, Piece::QueenBlack)?;
+        res.add_bitboard(&self.black_pieces.kings, Piece::KingBlack)?;
+        Ok(res)
+    }
+
+    fn get_pieceboard(&mut self, p: Piece) -> &mut BitBoard {
+        use Piece::*;
+        match p {
+            PawnWhite => &mut self.white_pieces.pawns,
+            KnightWhite => &mut self.white_pieces.knights,
+            BishopWhite => &mut self.white_pieces.bishops,
+            RookWhite => &mut self.white_pieces.rooks,
+            QueenWhite => &mut self.white_pieces.queens,
+            KingWhite => &mut self.white_pieces.kings,
+            PawnBlack => &mut self.black_pieces.pawns,
+            KnightBlack => &mut self.black_pieces.knights,
+            BishopBlack => &mut self.black_pieces.bishops,
+            RookBlack => &mut self.black_pieces.rooks,
+            QueenBlack => &mut self.black_pieces.queens,
+            KingBlack => &mut self.black_pieces.kings,
+            _ => panic!("Tried to query game for empty piece board"),
+        }
+    }
+}
+
 struct PieceBitBoards {
     pawns: BitBoard,
     knights: BitBoard,
@@ -424,7 +460,11 @@ impl_op_ex_commutative!(| |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.
 impl_op_ex_commutative!(^ |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.0 ^ b)});
 
 trait Game: Display {
-    fn make_move(&mut self, start: Position, end: Position);
+    /// Returns a game with the chess pieces on the standard positions
+    fn standard_setup() -> Self;
+    /// Moves piece p from start to end. Checking for legality
+    /// is implementation dependent. May panic on illegal moves.
+    fn make_move(&mut self, p: Piece, start: Position, end: Position);
 }
 
 // ---------------------------------------------
@@ -432,6 +472,13 @@ trait Game: Display {
 // ---------------------------------------------
 
 fn main() {
-    // println!("{}", BitBoardGame::standard_setup());
-    println!("{}", Piece::RookWhite);
+    let b: BitBoard = BitBoard::from(0b1);
+    println!("{}", b);
+    println!("{}", b.make_move(0, 17));
+
+    let mut g = BitBoardGame::standard_setup();
+    println!("{}", g);
+    g.make_move(Piece::KnightBlack, 1, 17);
+    println!("{}", g);
+    println!("{:b}", 0x8000000000000000u64);
 }
