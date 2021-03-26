@@ -55,6 +55,24 @@ impl fmt::Display for ChessError {
 // ---------------------------------------------
 // Pieces
 // ---------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+enum Piece {
+    PawnWhite,
+    KnightWhite,
+    BishopWhite,
+    RookWhite,
+    QueenWhite,
+    KingWhite,
+    PawnBlack,
+    KnightBlack,
+    BishopBlack,
+    RookBlack,
+    QueenBlack,
+    KingBlack,
+    Empty,
+}
+
 #[derive(Debug, Clone)]
 enum PieceType {
     Pawn,
@@ -75,32 +93,26 @@ enum Color {
 
 impl Display for Piece {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Piece::*;
         let symbol = match self {
-            Piece(PieceType::King, Color::White) => '\u{2654}',
-            Piece(PieceType::Queen, Color::White) => '\u{2655}',
-            Piece(PieceType::Rook, Color::White) => '\u{2656}',
-            Piece(PieceType::Bishop, Color::White) => '\u{2657}',
-            Piece(PieceType::Knight, Color::White) => '\u{2658}',
-            Piece(PieceType::Pawn, Color::White) => '\u{2659}',
-            Piece(PieceType::King, Color::Black) => '\u{265a}',
-            Piece(PieceType::Queen, Color::Black) => '\u{265b}',
-            Piece(PieceType::Rook, Color::Black) => '\u{265c}',
-            Piece(PieceType::Bishop, Color::Black) => '\u{265d}',
-            Piece(PieceType::Knight, Color::Black) => '\u{265e}',
-            Piece(PieceType::Pawn, Color::Black) => '\u{265f}',
-            Piece(PieceType::Empty, _) => ' ',
-            _ => panic!(format!(
-                "Illegal combination of piece and color: {:#?}",
-                self
-            )),
+            KingWhite => '\u{2654}',
+            QueenWhite => '\u{2655}',
+            RookWhite => '\u{2656}',
+            BishopWhite => '\u{2657}',
+            KnightWhite => '\u{2658}',
+            PawnWhite => '\u{2659}',
+            KingBlack => '\u{265a}',
+            QueenBlack => '\u{265b}',
+            RookBlack => '\u{265c}',
+            BishopBlack => '\u{265d}',
+            KnightBlack => '\u{265e}',
+            PawnBlack => '\u{265f}',
+            Empty => ' ',
         };
         write!(f, "{}", symbol);
         Ok(())
     }
 }
-
-#[derive(Debug, Clone)]
-struct Piece(PieceType, Color);
 
 // ---------------------------------------------
 // Board Types
@@ -151,13 +163,13 @@ struct MailboxBoard {
 impl MailboxBoard {
     fn empty() -> MailboxBoard {
         MailboxBoard {
-            pieces: array_init(|_| Piece(PieceType::Empty, Color::None)),
+            pieces: array_init(|_| Piece::Empty),
         }
     }
 
     fn add(&mut self, pos: Position, piece: Piece) -> ChessResult<()> {
         let current = &mut self.pieces[pos as usize];
-        if let Piece(PieceType::Empty, _) = current {
+        if let Piece::Empty = current {
             *current = piece;
             Ok(())
         } else {
@@ -200,12 +212,18 @@ impl BitBoard {
         bit_vec(self.0)
     }
 
-    fn rotate(&self, r: Rotation) -> BitBoard {
-        use Rotation::*;
-        match r {
-            Deg180 => self.flip_vert().flip_horz(),
-            _ => todo!(),
-        }
+    // Could've also been done in a match, but multiple functions is more efficient (saves the enum
+    // and comparison)
+    fn rotate90(&self, r: Rotation) -> BitBoard {
+        self.flip_horz().flip_diag()
+    }
+
+    fn rotate180(&self) -> BitBoard {
+        self.flip_vert().flip_horz()
+    }
+
+    fn rotate270(&self) -> BitBoard {
+        self.flip_vert().flip_antidiag()
     }
 
     // Uses fast assembly bit swap, thus only works on x86_64
@@ -239,6 +257,38 @@ impl BitBoard {
         x = ((x >> 2) & k2) | ((x & k2) << 2);
         x = ((x >> 4) & k4) | ((x & k4) << 4);
         return x.into();
+    }
+
+    /// Diagonal goes from top right to bottom left
+    /// Source: https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+    fn flip_diag(&self) -> BitBoard {
+        let k1: u64 = 0x5500550055005500;
+        let k2: u64 = 0x3333000033330000;
+        let k4: u64 = 0x0f0f0f0f00000000;
+        let mut x = self.0;
+        let mut t = k4 & (x ^ (x << 28));
+        x ^= t ^ (t >> 28);
+        t = k2 & (x ^ (x << 14));
+        x ^= t ^ (t >> 14);
+        t = k1 & (x ^ (x << 7));
+        x ^= t ^ (t >> 7);
+        x.into()
+    }
+
+    /// Antidiagonal goes from top left to bottom right
+    /// Source: https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
+    fn flip_antidiag(&self) -> BitBoard {
+        let k1: u64 = 0xaa00aa00aa00aa00;
+        let k2: u64 = 0xcccc0000cccc0000;
+        let k4: u64 = 0xf0f0f0f00f0f0f0f;
+        let mut x = self.0;
+        let mut t = x ^ (x << 36);
+        x ^= k4 & (t ^ (x >> 36));
+        t = k2 & (x ^ (x << 18));
+        x ^= t ^ (t >> 18);
+        t = k1 & (x ^ (x << 9));
+        x ^= t ^ (t >> 9);
+        x.into()
     }
 }
 
@@ -276,29 +326,30 @@ impl Game for BitBoardGame {
 
 impl Display for BitBoardGame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.state_as_mailbox().fmt(f)
+        self.state_as_mailbox()
+            .expect("Board was in an invalid state")
+            .fmt(f)
     }
 }
 
 impl BitBoardGame {
-    fn state_as_mailbox(&self) -> MailboxBoard {
-        use Color::*;
-        use PieceType::*;
+    fn state_as_mailbox(&self) -> ChessResult<MailboxBoard> {
+        use Piece::*;
 
         let mut res = MailboxBoard::empty();
-        res.add_bitboard(&self.white_pieces.pawns, Piece(Pawn, White));
-        res.add_bitboard(&self.white_pieces.knights, Piece(Knight, White));
-        res.add_bitboard(&self.white_pieces.bishops, Piece(Bishop, White));
-        res.add_bitboard(&self.white_pieces.rooks, Piece(Rook, White));
-        res.add_bitboard(&self.white_pieces.queens, Piece(Queen, White));
-        res.add_bitboard(&self.white_pieces.kings, Piece(King, White));
-        res.add_bitboard(&self.black_pieces.pawns, Piece(Pawn, Black));
-        res.add_bitboard(&self.black_pieces.knights, Piece(Knight, Black));
-        res.add_bitboard(&self.black_pieces.bishops, Piece(Bishop, Black));
-        res.add_bitboard(&self.black_pieces.rooks, Piece(Rook, Black));
-        res.add_bitboard(&self.black_pieces.queens, Piece(Queen, Black));
-        res.add_bitboard(&self.black_pieces.kings, Piece(King, Black));
-        res
+        res.add_bitboard(&self.white_pieces.pawns, Piece::PawnWhite)?;
+        res.add_bitboard(&self.white_pieces.knights, Piece::KnightWhite)?;
+        res.add_bitboard(&self.white_pieces.bishops, Piece::BishopWhite)?;
+        res.add_bitboard(&self.white_pieces.rooks, Piece::RookWhite)?;
+        res.add_bitboard(&self.white_pieces.queens, Piece::QueenWhite)?;
+        res.add_bitboard(&self.white_pieces.kings, Piece::KingWhite)?;
+        res.add_bitboard(&self.black_pieces.pawns, Piece::PawnBlack)?;
+        res.add_bitboard(&self.black_pieces.knights, Piece::KnightBlack)?;
+        res.add_bitboard(&self.black_pieces.bishops, Piece::BishopBlack)?;
+        res.add_bitboard(&self.black_pieces.rooks, Piece::RookBlack)?;
+        res.add_bitboard(&self.black_pieces.queens, Piece::QueenBlack)?;
+        res.add_bitboard(&self.black_pieces.kings, Piece::KingBlack)?;
+        Ok(res)
     }
 
     /// Returns a game with the figures placed on standard chess starting positions
@@ -315,10 +366,7 @@ impl BitBoardGame {
         // as those two pieces are mirrored, not rotated (see a chess board :) )
         // See below.
         let white_vec = vec![pawns, knights, bishops, rooks, queens, kings];
-        let black_vec: Vec<BitBoard> = white_vec
-            .iter()
-            .map(|b| b.rotate(Rotation::Deg180))
-            .collect();
+        let black_vec: Vec<BitBoard> = white_vec.iter().map(|b| b.rotate180()).collect();
 
         let whites = PieceBitBoards {
             pawns: pawns,
@@ -357,7 +405,7 @@ struct PieceBitBoards {
 }
 
 impl PieceBitBoards {
-    /// Returns board with all pieces occupied by white pieces.
+    /// Returns board all positions where this color occupies a spot.
     /// Does NOT check for double occupancies.
     fn combine(&self) -> BitBoard {
         (self.pawns | self.knights | self.bishops | self.rooks | self.queens | self.kings).into()
@@ -385,5 +433,5 @@ trait Game: Display {
 
 fn main() {
     // println!("{}", BitBoardGame::standard_setup());
-    println!("{}", Piece(PieceType::Rook, Color::White));
+    println!("{}", Piece::RookWhite);
 }
