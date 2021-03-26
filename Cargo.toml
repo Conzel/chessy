@@ -1,0 +1,11 @@
+[package]
+name = "chessy"
+version = "0.1.0"
+authors = ["Conzel <38732545+Conzel@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+array-init = "1.0.0"
+impl_ops = "0.1.1"
