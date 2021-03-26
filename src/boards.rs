@@ -5,49 +5,66 @@ use std::fmt::{self, Display};
 use std::ops;
 
 // ---------------------------------------------
-// Board Types
+// General
 // ---------------------------------------------
 
 pub const BOARD_SIZE: u8 = 8;
-pub type Position = usize;
+pub type Position = u8;
 
-// Displays the first 64 items from an iterator in a chessboard style:
-//
-//   a  b  c  d  e  f  g
-// 8 i1 i2 i3 ...        8
-// 7 ....
-//
-// Where i1,...i64 are the items of the iterator.
-// It is required that the iterator has at least 64 items, else we will return with an error.
-fn display_chessboard_style<I, C>(it: &mut I, f: &mut fmt::Formatter<'_>) -> fmt::Result
-where
-    I: Iterator<Item = C>,
-    C: Display,
-{
-    write!(f, " ")?;
-    for c in 'a'..'i' {
-        write!(f, " {}", c)?;
+// This is very wasteful, only use it when performance is of no concern!
+fn bit_vec(i: u64) -> Vec<u8> {
+    let mut res: Vec<u8> = Vec::with_capacity(64);
+    let mut i_ = i;
+    for _ in 0..64 {
+        res.push((i_ % 2) as u8);
+        i_ = i_ / 2;
     }
-    for row in 0..BOARD_SIZE {
-        write!(f, "\n{} ", 8 - row)?;
-        for _col in 0..BOARD_SIZE {
-            let i = it.next().expect("Iterator ended too early");
-            write!(f, "{} ", i)?;
-        }
-        write!(f, "{} ", 8 - row)?;
-    }
-    write!(f, "\n ")?;
-    for c in 'a'..'i' {
-        write!(f, " {}", c)?;
-    }
-    Ok(())
+    res.into_iter().rev().collect()
 }
 
-impl Display for BitBoard {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        display_chessboard_style(&mut bit_vec(self.0).iter(), f)
+// ---------------------------------------------
+// Positions
+// ---------------------------------------------
+
+pub fn pos_from_string(s: &str) -> ChessResult<u8> {
+    // Error is rather big, so we use a closure to avoid copies
+    let err_closure = || -> ChessError { format!("Invalid Chess position {}", s).into() };
+    let mut chars = s.chars();
+
+    let col = chars.next().ok_or_else(err_closure)?;
+    let row = chars
+        .next()
+        .map(|r| r.to_digit(10))
+        .flatten()
+        .ok_or_else(err_closure)?;
+
+    // We need to catch invalid early rows, else we will have a panic on unsigned integer underflow
+    //    Too many characters || row is invalid
+    if chars.next().is_some() || row > 8 {
+        // Too many characters
+        return Err(err_closure());
+    }
+
+    // number part v               v letter part
+    let pos = (8 - row) * 8 + col as u32 - 'a' as u32;
+    if pos >= 8 * 8 {
+        Err(err_closure())
+    } else {
+        Ok(pos as u8)
     }
 }
+
+pub fn pos_to_row_col(p: Position) -> (u8, u8) {
+    (p / 8, p % 8)
+}
+
+pub fn row_col_to_pos(row: u8, col: u8) -> Position {
+    row * 8 + col
+}
+
+// ---------------------------------------------
+// MailboxBoard
+// ---------------------------------------------
 
 pub struct MailboxBoard {
     pieces: [Piece; (BOARD_SIZE * BOARD_SIZE) as usize],
@@ -73,38 +90,32 @@ impl MailboxBoard {
     pub fn add_bitboard(&mut self, b: &BitBoard, piece: Piece) -> ChessResult<()> {
         for (pos, val) in b.bit_vec().iter().enumerate() {
             if *val == 1 {
-                self.add(pos, piece.clone())?
+                self.add(pos as u8, piece.clone())?
             }
         }
         Ok(())
     }
 }
 
+// ---------------------------------------------
+// BitBoard
+// ---------------------------------------------
+
 // TODO: Make this enum private later - we just need it public at the moment for quick debugging.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct BitBoard(u64);
-
-// TODO: Delete?
-enum Rotation {
-    Deg90,
-    Deg180,
-    Deg270,
-}
-
-// This is very wasteful, only use it when performance is of no concern!
-fn bit_vec(i: u64) -> Vec<u8> {
-    let mut res: Vec<u8> = Vec::with_capacity(64);
-    let mut i_ = i;
-    for _ in 0..64 {
-        res.push((i_ % 2) as u8);
-        i_ = i_ / 2;
-    }
-    res.into_iter().rev().collect()
-}
 
 impl BitBoard {
     pub fn bit_vec(&self) -> Vec<u8> {
         bit_vec(self.0)
+    }
+
+    pub fn singular(at: Position) -> BitBoard {
+        (0x8000000000000000 >> at).into()
+    }
+
+    pub fn empty() -> BitBoard {
+        0.into()
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
@@ -197,7 +208,7 @@ impl BitBoard {
     // TODO: Also make this private again
     pub fn make_move(&self, start: Position, end: Position) -> BitBoard {
         // Move implemented via flipping the bits and start and end position
-        (self.0 ^ (0x8000000000000000u64 >> start) ^ (0x8000000000000000u64 >> end)).into()
+        self.0 ^ BitBoard::singular(start) ^ BitBoard::singular(end)
     }
 }
 
@@ -207,17 +218,95 @@ impl From<u64> for BitBoard {
     }
 }
 
+// ---------------------------------------------
+// Displays
+// ---------------------------------------------
+
+// Displays the first 64 items from an iterator in a chessboard style:
+//
+//   a  b  c  d  e  f  g
+// 8 i1 i2 i3 ...        8
+// 7 ....
+//
+// Where i1,...i64 are the items of the iterator.
+// It is required that the iterator has at least 64 items, else we will return with an error.
+fn display_chessboard_style<I, C>(it: &mut I, f: &mut fmt::Formatter<'_>) -> fmt::Result
+where
+    I: Iterator<Item = C>,
+    C: Display,
+{
+    write!(f, " ")?;
+    for c in 'a'..'i' {
+        write!(f, " {}", c)?;
+    }
+    for row in 0..BOARD_SIZE {
+        write!(f, "\n{} ", 8 - row)?;
+        for _col in 0..BOARD_SIZE {
+            let i = it.next().expect("Iterator ended too early");
+            write!(f, "{} ", i)?;
+        }
+        write!(f, "{} ", 8 - row)?;
+    }
+    write!(f, "\n ")?;
+    for c in 'a'..'i' {
+        write!(f, " {}", c)?;
+    }
+    Ok(())
+}
+
+impl Display for BitBoard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        display_chessboard_style(&mut bit_vec(self.0).iter(), f)
+    }
+}
+
+impl fmt::Debug for BitBoard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // makes for nicer messages in rust asserts
+        write!(f, "\n");
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl Display for MailboxBoard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         display_chessboard_style(&mut self.pieces.iter(), f)
     }
 }
 
+// ---------------------------------------------
+// Operator Impls
+// ---------------------------------------------
+
 impl ops::BitOr<BitBoard> for BitBoard {
     type Output = Self;
 
     fn bitor(self, rhs: BitBoard) -> Self::Output {
         (self.0 | rhs.0).into()
+    }
+}
+
+impl ops::BitXor<BitBoard> for BitBoard {
+    type Output = Self;
+
+    fn bitxor(self, rhs: BitBoard) -> Self::Output {
+        (self.0 ^ rhs.0).into()
+    }
+}
+
+impl ops::Shr<u8> for BitBoard {
+    type Output = Self;
+
+    fn shr(self, rhs: u8) -> Self::Output {
+        (self.0 >> rhs).into()
+    }
+}
+
+impl ops::Shl<u8> for BitBoard {
+    type Output = Self;
+
+    fn shl(self, rhs: u8) -> Self::Output {
+        (self.0 << rhs).into()
     }
 }
 

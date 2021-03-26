@@ -4,10 +4,12 @@ extern crate impl_ops;
 
 mod boards;
 mod chess_errors;
+mod engine;
 mod game;
 mod pieces;
 
 use boards::*;
+use engine::temp_examine;
 use game::*;
 use pieces::*;
 
@@ -31,6 +33,7 @@ use pieces::*;
 //
 // END:
 // * Abstract engine into its own form
+// * Write Algebraic Notation Parser
 // * Interfaces
 //   * Simple CLI
 //   * Simple GUI
@@ -53,4 +56,6 @@ fn main() {
     g.make_move(Piece::KnightBlack, 1, 17);
     println!("{}", g);
     println!("{:b}", 0x8000000000000000u64);
+    println!("{}", BitBoard::from(0x8000000000000000u64 >> 10));
+    temp_examine();
 }
