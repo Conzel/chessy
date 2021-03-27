@@ -40,27 +40,33 @@ impl BitBoardGame {
 /// As this will be precomputed and stored in a table, it does not matter too much
 /// how efficient it is.
 /// Offsets are saved as (row,col).
-fn offset_attack_board<'a>(
+const fn offset_attack_board<'a, const N: usize>(
     pos: Position,
-    offsets: impl Iterator<Item = &'a (i16, i16)>,
+    offsets: [(i16, i16); N],
 ) -> BitBoard {
     // A board that has a 1 at position pos
     let mut res = BitBoard::empty();
     let (row_u, col_u) = pos_to_row_col(pos);
     let (row, col) = (row_u as i16, col_u as i16);
-    for (off_row, off_col) in offsets {
+
+    let mut i = 0;
+    // const fns need while loop
+    while i < N {
+        let (off_row, off_col) = offsets[i];
         let new_row = row + off_row;
         let new_col = col + off_col;
         if new_row < 8 && new_row >= 0 && new_col < 8 && new_col >= 0 {
-            res = res ^ BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8));
+            // res = res ^ BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8));
+            res = BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8)).const_xor(res);
         }
+        i += 1;
     }
     res
 }
 
 /// TODO: precompute this in a table
-fn knight_attack_board(pos: Position) -> BitBoard {
-    static KNIGHT_OFFSETS: [(i16, i16); 8] = [
+const fn knight_attack_board(pos: Position) -> BitBoard {
+    const KNIGHT_OFFSETS: [(i16, i16); 8] = [
         (1, 2),
         (2, 1),
         (-1, 2),
@@ -70,12 +76,12 @@ fn knight_attack_board(pos: Position) -> BitBoard {
         (-1, -2),
         (-2, -1),
     ];
-    offset_attack_board(pos, KNIGHT_OFFSETS.iter())
+    offset_attack_board(pos, KNIGHT_OFFSETS)
 }
 
 /// TODO: precompute this in a table
-fn king_attack_board(pos: Position) -> BitBoard {
-    static KING_OFFSETS: [(i16, i16); 8] = [
+const fn king_attack_board(pos: Position) -> BitBoard {
+    const KING_OFFSETS: [(i16, i16); 8] = [
         (0, 1),
         (1, 0),
         (0, -1),
@@ -85,19 +91,19 @@ fn king_attack_board(pos: Position) -> BitBoard {
         (-1, 1),
         (1, -1),
     ];
-    offset_attack_board(pos, KING_OFFSETS.iter())
+    offset_attack_board(pos, KING_OFFSETS)
 }
 
 /// TODO: precompute this in a table
-fn white_pawn_attack_board(pos: Position) -> BitBoard {
-    static PAWN_OFFSETS: [(i16, i16); 2] = [(-1, -1), (-1, 1)];
-    offset_attack_board(pos, PAWN_OFFSETS.iter())
+const fn white_pawn_attack_board(pos: Position) -> BitBoard {
+    const PAWN_OFFSETS: [(i16, i16); 2] = [(-1, -1), (-1, 1)];
+    offset_attack_board(pos, PAWN_OFFSETS)
 }
 
 /// TODO: precompute this in a table
-fn black_pawn_attack_board(pos: Position) -> BitBoard {
-    static PAWN_OFFSETS: [(i16, i16); 2] = [(1, -1), (1, 1)];
-    offset_attack_board(pos, PAWN_OFFSETS.iter())
+const fn black_pawn_attack_board(pos: Position) -> BitBoard {
+    const PAWN_OFFSETS: [(i16, i16); 2] = [(1, -1), (1, 1)];
+    offset_attack_board(pos, PAWN_OFFSETS)
 }
 
 // TODO: remove

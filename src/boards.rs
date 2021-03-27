@@ -54,11 +54,11 @@ pub fn pos_from_string(s: &str) -> ChessResult<u8> {
     }
 }
 
-pub fn pos_to_row_col(p: Position) -> (u8, u8) {
+pub const fn pos_to_row_col(p: Position) -> (u8, u8) {
     (p / 8, p % 8)
 }
 
-pub fn row_col_to_pos(row: u8, col: u8) -> Position {
+pub const fn row_col_to_pos(row: u8, col: u8) -> Position {
     row * 8 + col
 }
 
@@ -110,12 +110,12 @@ impl BitBoard {
         bit_vec(self.0)
     }
 
-    pub fn singular(at: Position) -> BitBoard {
-        (0x8000000000000000 >> at).into()
+    pub const fn singular(at: Position) -> BitBoard {
+        BitBoard(0x8000000000000000 >> at)
     }
 
-    pub fn empty() -> BitBoard {
-        0.into()
+    pub const fn empty() -> BitBoard {
+        BitBoard(0)
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
@@ -209,6 +209,10 @@ impl BitBoard {
     pub fn make_move(&self, start: Position, end: Position) -> BitBoard {
         // Move implemented via flipping the bits and start and end position
         self.0 ^ BitBoard::singular(start) ^ BitBoard::singular(end)
+    }
+
+    pub const fn const_xor(&self, rhs: BitBoard) -> BitBoard {
+        BitBoard(self.0 ^ rhs.0)
     }
 }
 
