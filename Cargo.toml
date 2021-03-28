@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 array-init = "1.0.0"
 impl_ops = "0.1.1"
+rand = "0.8.3"

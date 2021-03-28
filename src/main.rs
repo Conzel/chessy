@@ -1,4 +1,5 @@
 #![feature(asm)]
+#![feature(const_panic)]
 #[macro_use]
 extern crate impl_ops;
 
@@ -9,7 +10,6 @@ mod game;
 mod pieces;
 
 use boards::*;
-use engine::temp_examine;
 use game::*;
 use pieces::*;
 
@@ -47,15 +47,7 @@ use pieces::*;
 // ---------------------------------------------
 
 fn main() {
-    let b: BitBoard = BitBoard::from(0b1);
-    println!("{}", b);
-    println!("{}", b.make_move(0, 17));
-
     let mut g = BitBoardGame::standard_setup();
     println!("{}", g);
     g.make_move(Piece::KnightBlack, 1, 17);
-    println!("{}", g);
-    println!("{:b}", 0x8000000000000000u64);
-    println!("{}", BitBoard::from(0x8000000000000000u64 >> 10));
-    temp_examine();
 }

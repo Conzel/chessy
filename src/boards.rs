@@ -54,6 +54,8 @@ pub fn pos_from_string(s: &str) -> ChessResult<u8> {
     }
 }
 
+/// Returns row and col from position.
+/// Example: Position 63 (H1 in chess board) is mapped to (7,7)
 pub const fn pos_to_row_col(p: Position) -> (u8, u8) {
     (p / 8, p % 8)
 }
@@ -110,6 +112,10 @@ impl BitBoard {
         bit_vec(self.0)
     }
 
+    pub const fn new(u: u64) -> BitBoard {
+        BitBoard(u)
+    }
+
     pub const fn singular(at: Position) -> BitBoard {
         BitBoard(0x8000000000000000 >> at)
     }
@@ -120,21 +126,33 @@ impl BitBoard {
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
     // and comparison)
+    /// Rotates Bitboard 90 degrees CLOCKWISE
     pub fn rotate90(&self) -> BitBoard {
-        self.flip_horz().flip_diag()
+        self.flip_vert().flip_antidiag()
     }
 
+    /// Rotates Bitboard 180 degrees
     pub fn rotate180(&self) -> BitBoard {
         self.flip_vert().flip_horz()
     }
 
+    /// Rotates Bitboard 270 (-90) degrees CLOCKWISE
     pub fn rotate270(&self) -> BitBoard {
-        self.flip_vert().flip_antidiag()
+        self.flip_vert().flip_diag()
+    }
+
+    /// Rotates Bitboard 270 (-90) degrees CLOCKWISE
+    pub const fn rotate270_const(&self) -> BitBoard {
+        self.flip_horz_const().flip_diag()
+    }
+
+    pub const fn rotate90_const(&self) -> BitBoard {
+        self.flip_horz_const().flip_antidiag()
     }
 
     // Uses fast assembly bit swap, thus only works on x86_64
     #[cfg(any(target_arch = "x86_64"))]
-    fn flip_vert(&self) -> BitBoard {
+    fn flip_horz(&self) -> BitBoard {
         let c: u64;
         unsafe {
             asm!(
@@ -148,13 +166,28 @@ impl BitBoard {
     }
 
     #[cfg(not(any(target_arch = "x86_64")))]
-    fn flip_vert(&self) -> BitBoard {
-        incomplete!()
+    fn flip_horz(&self) -> BitBoard {
+        flip_horz_const(self);
+    }
+
+    // const fn version of flip_vert, a bit slower
+    const fn flip_horz_const(&self) -> BitBoard {
+        let x = self.0;
+        BitBoard::new(
+            (x << 56)
+                | (x << 40 & 0x00ff000000000000)
+                | (x << 24 & 0x0000ff0000000000)
+                | (x << 8 & 0x000000ff00000000)
+                | (x >> 8 & 0x00000000ff000000)
+                | (x >> 24 & 0x0000000000ff0000)
+                | (x >> 40 & 0x000000000000ff00)
+                | (x >> 56),
+        )
     }
 
     /// Straight-forward implementation of a parallel prefix algorithm.
     /// Source: https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
-    fn flip_horz(&self) -> BitBoard {
+    const fn flip_vert(&self) -> BitBoard {
         let k1: u64 = 0x5555555555555555;
         let k2: u64 = 0x3333333333333333;
         let k4: u64 = 0x0f0f0f0f0f0f0f0f;
@@ -162,12 +195,12 @@ impl BitBoard {
         x = ((x >> 1) & k1) | ((x & k1) << 1);
         x = ((x >> 2) & k2) | ((x & k2) << 2);
         x = ((x >> 4) & k4) | ((x & k4) << 4);
-        return x.into();
+        BitBoard::new(x)
     }
 
-    /// Diagonal goes from top right to bottom left
+    /// Diagonal (mirror axis) goes from top left to bottom right
     /// Source: https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
-    fn flip_diag(&self) -> BitBoard {
+    const fn flip_diag(&self) -> BitBoard {
         let k1: u64 = 0x5500550055005500;
         let k2: u64 = 0x3333000033330000;
         let k4: u64 = 0x0f0f0f0f00000000;
@@ -178,12 +211,12 @@ impl BitBoard {
         x ^= t ^ (t >> 14);
         t = k1 & (x ^ (x << 7));
         x ^= t ^ (t >> 7);
-        x.into()
+        BitBoard::new(x)
     }
 
-    /// Antidiagonal goes from top left to bottom right
+    /// Antidiagonal (mirror axis) goes from top right to bottom left
     /// Source: https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating
-    fn flip_antidiag(&self) -> BitBoard {
+    const fn flip_antidiag(&self) -> BitBoard {
         let k1: u64 = 0xaa00aa00aa00aa00;
         let k2: u64 = 0xcccc0000cccc0000;
         let k4: u64 = 0xf0f0f0f00f0f0f0f;
@@ -194,7 +227,7 @@ impl BitBoard {
         x ^= t ^ (t >> 18);
         t = k1 & (x ^ (x << 9));
         x ^= t ^ (t >> 9);
-        x.into()
+        BitBoard::new(x)
     }
 
     /// Moves a piece on the board. Does NOT check whether the move is legal (i.e.
@@ -316,3 +349,127 @@ impl ops::Shl<u8> for BitBoard {
 
 impl_op_ex_commutative!(| |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.0 | b)});
 impl_op_ex_commutative!(^ |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.0 ^ b)});
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::prelude::*;
+
+    /// Tests if F is an identity function using generated values by G.
+    /// Tests 1000 cycles.
+    fn is_id<T, F, G>(f: F, g: G)
+    where
+        F: Fn(T) -> T,
+        G: Fn() -> T,
+        T: fmt::Debug + std::cmp::PartialEq<T> + Clone,
+    {
+        for _ in 1..1000 {
+            let v = g();
+            assert_eq!(f(v.clone()), v);
+        }
+    }
+
+    fn random_board() -> BitBoard {
+        let mut rng = thread_rng();
+        BitBoard::new(rng.gen_range(std::u64::MIN..std::u64::MAX))
+    }
+
+    #[test]
+    fn test_flip_antidiag() {
+        assert_eq!(BitBoard::singular(0).flip_diag(), BitBoard::singular(0));
+        assert_eq!(BitBoard::singular(9).flip_diag(), BitBoard::singular(9));
+        assert_eq!(BitBoard::singular(63).flip_diag(), BitBoard::singular(63));
+        assert_eq!(BitBoard::singular(7).flip_diag(), BitBoard::singular(56));
+        assert_eq!(BitBoard::singular(56).flip_diag(), BitBoard::singular(7));
+        assert_eq!(BitBoard::singular(8).flip_diag(), BitBoard::singular(1));
+
+        assert_eq!(
+            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_antidiag(),
+            BitBoard::singular(23) ^ BitBoard::singular(31)
+        );
+    }
+
+    #[test]
+    fn test_flip_diag() {
+        assert_eq!(
+            BitBoard::singular(0).flip_antidiag(),
+            BitBoard::singular(63)
+        );
+        assert_eq!(
+            BitBoard::singular(9).flip_antidiag(),
+            BitBoard::singular(54)
+        );
+        assert_eq!(
+            BitBoard::singular(63).flip_antidiag(),
+            BitBoard::singular(0)
+        );
+        assert_eq!(BitBoard::singular(7).flip_antidiag(), BitBoard::singular(7));
+        assert_eq!(
+            BitBoard::singular(56).flip_antidiag(),
+            BitBoard::singular(56)
+        );
+        assert_eq!(
+            BitBoard::singular(8).flip_antidiag(),
+            BitBoard::singular(62)
+        );
+
+        assert_eq!(
+            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_diag(),
+            BitBoard::singular(32) ^ BitBoard::singular(40)
+        );
+    }
+
+    #[test]
+    fn test_rotate_90() {
+        assert_eq!(BitBoard::singular(0).rotate90(), BitBoard::singular(7));
+        assert_eq!(BitBoard::singular(9).rotate90(), BitBoard::singular(14));
+        assert_eq!(BitBoard::singular(63).rotate90(), BitBoard::singular(56));
+        assert_eq!(BitBoard::singular(7).rotate90(), BitBoard::singular(63));
+        assert_eq!(BitBoard::singular(56).rotate90(), BitBoard::singular(0));
+
+        assert_eq!(
+            (BitBoard::singular(4) ^ BitBoard::singular(5)).rotate90(),
+            BitBoard::singular(39) ^ BitBoard::singular(47)
+        );
+    }
+
+    #[test]
+    fn flip_vert() {
+        assert_eq!(BitBoard::singular(0).flip_vert(), BitBoard::singular(7));
+        assert_eq!(BitBoard::singular(9).flip_vert(), BitBoard::singular(14));
+        assert_eq!(BitBoard::singular(63).flip_vert(), BitBoard::singular(56));
+        assert_eq!(BitBoard::singular(7).flip_vert(), BitBoard::singular(0));
+        assert_eq!(BitBoard::singular(56).flip_vert(), BitBoard::singular(63));
+
+        assert_eq!(
+            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_vert(),
+            BitBoard::singular(2) ^ BitBoard::singular(3)
+        );
+    }
+
+    #[test]
+    fn flip_vert_twice_identity() {
+        let mut rng = thread_rng();
+        is_id(|x: BitBoard| x.flip_vert().flip_vert(), random_board);
+    }
+
+    #[test]
+    fn flip_horz() {
+        assert_eq!(BitBoard::singular(0).flip_horz(), BitBoard::singular(56));
+        assert_eq!(BitBoard::singular(9).flip_horz(), BitBoard::singular(49));
+        assert_eq!(BitBoard::singular(63).flip_horz(), BitBoard::singular(7));
+        assert_eq!(BitBoard::singular(7).flip_horz(), BitBoard::singular(63));
+        assert_eq!(BitBoard::singular(56).flip_horz(), BitBoard::singular(0));
+
+        assert_eq!(
+            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_horz(),
+            BitBoard::singular(60) ^ BitBoard::singular(61)
+        );
+    }
+
+    #[test]
+    fn flip_horz_twice_identity() {
+        let mut rng = thread_rng();
+        is_id(|x: BitBoard| x.flip_horz().flip_horz(), random_board);
+    }
+}
