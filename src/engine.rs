@@ -239,27 +239,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pos_from_string() {
-        assert_eq!(pos_from_string("h1").unwrap(), 63);
-        assert_eq!(pos_from_string("a8").unwrap(), 0);
-        assert_eq!(pos_from_string("b6").unwrap(), 17);
-        assert!(pos_from_string("sdlfj").is_err());
-        assert!(pos_from_string("a9").is_err());
-    }
-
-    #[test]
-    fn test_pos_row_col_conversion() {
-        assert_eq!(pos_to_row_col(0), (0, 0));
-        assert_eq!(pos_to_row_col(1), (0, 1));
-        assert_eq!(pos_to_row_col(8), (1, 0));
-        assert_eq!(pos_to_row_col(9), (1, 1));
-        let (r1, c1) = pos_to_row_col(9);
-        assert_eq!(row_col_to_pos(r1, c1), 9);
-        let (r2, c2) = pos_to_row_col(23);
-        assert_eq!(row_col_to_pos(r2, c2), 23);
-    }
-
-    #[test]
     fn test_knight_attack_board() {
         assert_eq!(
             knight_attack_board(0),
