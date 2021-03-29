@@ -1,5 +1,4 @@
 #![feature(asm)]
-#![feature(const_trait_impl)]
 #![feature(const_panic)]
 #[macro_use]
 extern crate impl_ops;

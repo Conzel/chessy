@@ -243,9 +243,13 @@ impl BitBoard {
         // Move implemented via flipping the bits and start and end position
         self.0 ^ BitBoard::singular(start) ^ BitBoard::singular(end)
     }
+
+    pub const fn const_xor(&self, rhs: BitBoard) -> BitBoard {
+        BitBoard(self.0 ^ rhs.0)
+    }
 }
 
-impl const From<u64> for BitBoard {
+impl From<u64> for BitBoard {
     fn from(u: u64) -> Self {
         BitBoard(u)
     }
@@ -311,43 +315,35 @@ impl Display for MailboxBoard {
 // Operator Impls
 // ---------------------------------------------
 
-impl const ops::BitOr<BitBoard> for BitBoard {
+impl ops::BitOr<BitBoard> for BitBoard {
     type Output = Self;
 
     fn bitor(self, rhs: BitBoard) -> Self::Output {
-        Self::from(self.0 | rhs.0)
+        (self.0 | rhs.0).into()
     }
 }
 
-impl const ops::BitAnd<BitBoard> for BitBoard {
-    type Output = Self;
-
-    fn bitand(self, rhs: BitBoard) -> Self::Output {
-        Self::from(self.0 & rhs.0)
-    }
-}
-
-impl const ops::BitXor<BitBoard> for BitBoard {
+impl ops::BitXor<BitBoard> for BitBoard {
     type Output = Self;
 
     fn bitxor(self, rhs: BitBoard) -> Self::Output {
-        Self::from(self.0 ^ rhs.0)
+        (self.0 ^ rhs.0).into()
     }
 }
 
-impl const ops::Shr<u8> for BitBoard {
+impl ops::Shr<u8> for BitBoard {
     type Output = Self;
 
     fn shr(self, rhs: u8) -> Self::Output {
-        Self::from(self.0 >> rhs)
+        (self.0 >> rhs).into()
     }
 }
 
-impl const ops::Shl<u8> for BitBoard {
+impl ops::Shl<u8> for BitBoard {
     type Output = Self;
 
     fn shl(self, rhs: u8) -> Self::Output {
-        Self::from(self.0 << rhs)
+        (self.0 << rhs).into()
     }
 }
 
