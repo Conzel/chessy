@@ -247,6 +247,10 @@ impl BitBoard {
     pub const fn const_xor(&self, rhs: BitBoard) -> BitBoard {
         BitBoard(self.0 ^ rhs.0)
     }
+
+    pub const fn const_and(&self, rhs: BitBoard) -> BitBoard {
+        BitBoard(self.0 & rhs.0)
+    }
 }
 
 impl From<u64> for BitBoard {
