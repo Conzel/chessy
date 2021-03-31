@@ -1,5 +1,7 @@
 #![feature(asm)]
 #![feature(const_panic)]
+// #![feature(const_eval_limit)]
+// #![const_eval_limit = "50000000"]
 #[macro_use]
 extern crate impl_ops;
 
@@ -7,7 +9,9 @@ mod boards;
 mod chess_errors;
 mod engine;
 mod game;
+mod magic_numbers;
 mod pieces;
+mod utils;
 
 use boards::*;
 use game::*;

@@ -9,7 +9,6 @@ use std::ops;
 // ---------------------------------------------
 
 pub const BOARD_SIZE: u8 = 8;
-pub type Position = u8;
 
 // This is very wasteful, only use it when performance is of no concern!
 fn bit_vec(i: u64) -> Vec<u8> {
@@ -26,7 +25,9 @@ fn bit_vec(i: u64) -> Vec<u8> {
 // Positions
 // ---------------------------------------------
 
-pub fn pos_from_string(s: &str) -> ChessResult<u8> {
+pub type Position = u8;
+
+pub fn pos_from_string(s: &str) -> ChessResult<Position> {
     // Error is rather big, so we use a closure to avoid copies
     let err_closure = || -> ChessError { format!("Invalid Chess position {}", s).into() };
     let mut chars = s.chars();
@@ -54,14 +55,23 @@ pub fn pos_from_string(s: &str) -> ChessResult<u8> {
     }
 }
 
-/// Returns row and col from position.
+/// Returns row and col from position. If the position is illegal, an illegal row and col
+/// will be returned.
 /// Example: Position 63 (H1 in chess board) is mapped to (7,7)
 pub const fn pos_to_row_col(p: Position) -> (u8, u8) {
     (p / 8, p % 8)
 }
 
+/// Transforms a row and a col to Position on the board.
+/// Row and col must correspond to a legal board position,
+/// else the returned value also doesn't correspond to a legal board position.
 pub const fn row_col_to_pos(row: u8, col: u8) -> Position {
     row * 8 + col
+}
+
+/// Checks if row and col belong to a legal board position.
+pub const fn in_board(row: i16, col: i16) -> bool {
+    row >= 0 && col >= 0 && row < 8 && col < 8
 }
 
 // ---------------------------------------------
@@ -122,6 +132,16 @@ impl BitBoard {
 
     pub const fn empty() -> BitBoard {
         BitBoard(0)
+    }
+
+    // Allows access to underlying data – should not be used when possible
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    // Allows access to underlying data – should not be used when possible
+    pub const fn bit_set_at(self, pos: u8) -> bool {
+        (self.0 >> (64 - pos - 1)) % 2 == 1
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
@@ -402,6 +422,16 @@ mod tests {
         assert_eq!(row_col_to_pos(r1, c1), 9);
         let (r2, c2) = pos_to_row_col(23);
         assert_eq!(row_col_to_pos(r2, c2), 23);
+    }
+
+    #[test]
+    fn test_bit_set_at() {
+        assert!(BitBoard::from(0b1).bit_set_at(63));
+        assert!(BitBoard::from(0b11).bit_set_at(63));
+        assert!(BitBoard::from(0b11).bit_set_at(62));
+        assert!(!BitBoard::from(0b11).bit_set_at(0));
+        assert!(!BitBoard::from(0b11).bit_set_at(61));
+        assert!(!BitBoard::from(0b11).bit_set_at(58));
     }
 
     #[test]
