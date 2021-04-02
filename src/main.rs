@@ -54,4 +54,7 @@ fn main() {
     let mut g = BitBoardGame::standard_setup();
     println!("{}", g);
     g.make_move(Piece::KnightBlack, 1, 17);
+
+    println!("{}", engine::get_bishop_attack_board(49, bitboard!(35)));
+    // println!("{}", engine::get_rook_attack_board(49, bitboard!(35)));
 }

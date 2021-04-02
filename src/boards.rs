@@ -377,31 +377,8 @@ impl_op_ex_commutative!(^ |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::*;
     use rand::prelude::*;
-
-    fn id<T>(x: T) -> T {
-        x
-    }
-
-    /// Tests if F and H are identical functions using generated values by G.
-    /// Tests 1000 cycles.
-    fn is_id<T, F, G, H>(f: F, h: H, g: G)
-    where
-        F: Fn(T) -> T,
-        H: Fn(T) -> T,
-        G: Fn() -> T,
-        T: fmt::Debug + std::cmp::PartialEq<T> + Clone,
-    {
-        for _ in 1..1000 {
-            let v = g();
-            assert_eq!(f(v.clone()), h(v));
-        }
-    }
-
-    fn random_board() -> BitBoard {
-        let mut rng = thread_rng();
-        BitBoard::new(rng.gen_range(std::u64::MIN..std::u64::MAX))
-    }
 
     #[test]
     fn test_pos_from_string() {
@@ -557,13 +534,11 @@ mod tests {
 
     #[test]
     fn flip_horz_twice_identity() {
-        let mut rng = thread_rng();
         is_id(|x: BitBoard| x.flip_horz().flip_horz(), id, random_board);
     }
 
     #[test]
     fn rot_270_rot_180_90_identity() {
-        let mut rng = thread_rng();
         is_id(
             |x: BitBoard| x.rotate90().rotate180(),
             BitBoard::rotate270,
@@ -573,13 +548,11 @@ mod tests {
 
     #[test]
     fn rot_90_const_rot_90_identity() {
-        let mut rng = thread_rng();
         is_id(BitBoard::rotate90_const, BitBoard::rotate90, random_board);
     }
 
     #[test]
     fn rot_270_const_rot_270_identity() {
-        let mut rng = thread_rng();
         is_id(BitBoard::rotate270_const, BitBoard::rotate270, random_board);
     }
 }
