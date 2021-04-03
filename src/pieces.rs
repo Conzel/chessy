@@ -4,7 +4,7 @@ use std::fmt::{self, Display};
 // Pieces
 // ---------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Piece {
     PawnWhite,
     KnightWhite,
@@ -21,7 +21,7 @@ pub enum Piece {
     Empty,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PieceType {
     Pawn,
     Knight,
@@ -32,7 +32,7 @@ pub enum PieceType {
     Empty,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     Black,
     White,
@@ -59,5 +59,35 @@ impl Display for Piece {
         };
         write!(f, "{}", symbol)?;
         Ok(())
+    }
+}
+
+impl Piece {
+    pub fn get_color(&self) -> Color {
+        use Piece::*;
+
+        match self {
+            PawnWhite | KnightWhite | BishopWhite | RookWhite | QueenWhite | KingWhite => {
+                Color::White
+            }
+            PawnBlack | KnightBlack | BishopBlack | RookBlack | QueenBlack | KingBlack => {
+                Color::Black
+            }
+            _ => Color::None,
+        }
+    }
+
+    pub fn get_type(&self) -> PieceType {
+        use Piece::*;
+
+        match self {
+            PawnWhite | PawnBlack => PieceType::Pawn,
+            KnightWhite | KnightBlack => PieceType::King,
+            BishopWhite | BishopBlack => PieceType::Bishop,
+            RookWhite | RookBlack => PieceType::Rook,
+            QueenWhite | QueenBlack => PieceType::Queen,
+            KingWhite | KingBlack => PieceType::King,
+            _ => PieceType::Empty,
+        }
     }
 }

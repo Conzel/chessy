@@ -12,11 +12,13 @@ use std::fmt::{self, Display};
 // different pieces. This sadly makes some of the code a bit bloated.
 pub struct BitBoardGame {
     // The individual bit boards for the pieces
-    white_pieces: PieceBitBoards,
-    black_pieces: PieceBitBoards,
+    pub white_pieces: PieceBitBoards,
+    pub black_pieces: PieceBitBoards,
     // Bit board showing where all the white pieces are
-    all_whites: BitBoard,
-    all_blacks: BitBoard,
+    pub all_whites: BitBoard,
+    pub all_blacks: BitBoard,
+    pub occupancy: BitBoard,
+    pub mailbox_repr: MailboxBoard,
 }
 
 impl Game for BitBoardGame {
@@ -60,43 +62,29 @@ impl Game for BitBoardGame {
             kings: black_vec[4],
         };
 
+        let all_whites = whites.combine();
+        let all_blacks = blacks.combine();
+        let mailbox_repr = MailboxBoard::from_piece_bitboards(&whites, &blacks)
+            .expect("Standard setup failed; board in invalid state.");
+
         BitBoardGame {
-            all_whites: whites.combine(),
-            all_blacks: blacks.combine(),
+            all_whites: all_whites,
+            all_blacks: all_blacks,
             white_pieces: whites,
             black_pieces: blacks,
+            occupancy: all_whites | all_blacks,
+            mailbox_repr: mailbox_repr,
         }
     }
 }
 
 impl Display for BitBoardGame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.state_as_mailbox()
-            .expect("Board was in an invalid state")
-            .fmt(f)
+        self.mailbox_repr.fmt(f)
     }
 }
 
 impl BitBoardGame {
-    fn state_as_mailbox(&self) -> ChessResult<MailboxBoard> {
-        use Piece::*;
-
-        let mut res = MailboxBoard::empty();
-        res.add_bitboard(&self.white_pieces.pawns, PawnWhite)?;
-        res.add_bitboard(&self.white_pieces.knights, KnightWhite)?;
-        res.add_bitboard(&self.white_pieces.bishops, BishopWhite)?;
-        res.add_bitboard(&self.white_pieces.rooks, RookWhite)?;
-        res.add_bitboard(&self.white_pieces.queens, QueenWhite)?;
-        res.add_bitboard(&self.white_pieces.kings, KingWhite)?;
-        res.add_bitboard(&self.black_pieces.pawns, PawnBlack)?;
-        res.add_bitboard(&self.black_pieces.knights, KnightBlack)?;
-        res.add_bitboard(&self.black_pieces.bishops, BishopBlack)?;
-        res.add_bitboard(&self.black_pieces.rooks, RookBlack)?;
-        res.add_bitboard(&self.black_pieces.queens, QueenBlack)?;
-        res.add_bitboard(&self.black_pieces.kings, KingBlack)?;
-        Ok(res)
-    }
-
     fn get_pieceboard(&mut self, p: Piece) -> &mut BitBoard {
         use Piece::*;
         match p {
@@ -114,23 +102,6 @@ impl BitBoardGame {
             KingBlack => &mut self.black_pieces.kings,
             _ => panic!("Tried to query game for empty piece board"),
         }
-    }
-}
-
-struct PieceBitBoards {
-    pawns: BitBoard,
-    knights: BitBoard,
-    bishops: BitBoard,
-    rooks: BitBoard,
-    queens: BitBoard,
-    kings: BitBoard,
-}
-
-impl PieceBitBoards {
-    /// Returns board all positions where this color occupies a spot.
-    /// Does NOT check for double occupancies.
-    fn combine(&self) -> BitBoard {
-        (self.pawns | self.knights | self.bishops | self.rooks | self.queens | self.kings).into()
     }
 }
 

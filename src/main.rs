@@ -8,6 +8,7 @@ extern crate impl_ops;
 mod attacks;
 mod boards;
 mod chess_errors;
+mod engine;
 mod game;
 mod magic_number_tables;
 mod pieces;

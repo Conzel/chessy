@@ -74,6 +74,41 @@ pub const fn in_board(row: i16, col: i16) -> bool {
     row >= 0 && col >= 0 && row < 8 && col < 8
 }
 
+/// Returns algebraic notation equivalent of chess position. Error if the position is not valid.
+pub fn pos_to_algebraic(pos: Position) -> ChessResult<String> {
+    if pos > 63 {
+        Err("Invalid Position".to_string().into())
+    } else {
+        let (row, col) = pos_to_row_col(pos);
+        Ok(format!(
+            "{}{}",
+            7 - row,
+            ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col as usize]
+        ))
+    }
+}
+
+// ---------------------------------------------
+// PieceBitBoards
+// ---------------------------------------------
+
+pub struct PieceBitBoards {
+    pub pawns: BitBoard,
+    pub knights: BitBoard,
+    pub bishops: BitBoard,
+    pub rooks: BitBoard,
+    pub queens: BitBoard,
+    pub kings: BitBoard,
+}
+
+impl PieceBitBoards {
+    /// Returns board all positions where this color occupies a spot.
+    /// Does NOT check for double occupancies.
+    pub fn combine(&self) -> BitBoard {
+        (self.pawns | self.knights | self.bishops | self.rooks | self.queens | self.kings).into()
+    }
+}
+
 // ---------------------------------------------
 // MailboxBoard
 // ---------------------------------------------
@@ -106,6 +141,38 @@ impl MailboxBoard {
             }
         }
         Ok(())
+    }
+
+    pub fn from_piece_bitboards(
+        whites: &PieceBitBoards,
+        blacks: &PieceBitBoards,
+    ) -> ChessResult<MailboxBoard> {
+        use Piece::*;
+
+        let mut res = MailboxBoard::empty();
+        res.add_bitboard(&whites.pawns, PawnWhite).unwrap();
+        res.add_bitboard(&whites.knights, KnightWhite).unwrap();
+        res.add_bitboard(&whites.bishops, BishopWhite).unwrap();
+        res.add_bitboard(&whites.rooks, RookWhite).unwrap();
+        res.add_bitboard(&whites.queens, QueenWhite).unwrap();
+        res.add_bitboard(&whites.kings, KingWhite).unwrap();
+        res.add_bitboard(&blacks.pawns, PawnBlack).unwrap();
+        res.add_bitboard(&blacks.knights, KnightBlack).unwrap();
+        res.add_bitboard(&blacks.bishops, BishopBlack).unwrap();
+        res.add_bitboard(&blacks.rooks, RookBlack).unwrap();
+        res.add_bitboard(&blacks.queens, QueenBlack).unwrap();
+        res.add_bitboard(&blacks.kings, KingBlack).unwrap();
+
+        Ok(res)
+    }
+}
+
+impl<'a> IntoIterator for &'a MailboxBoard {
+    type Item = Piece;
+    type IntoIter = std::array::IntoIter<Self::Item, 64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::array::IntoIter::new(self.pieces)
     }
 }
 
@@ -267,6 +334,10 @@ impl BitBoard {
         BitBoard(self.0 ^ rhs.0)
     }
 
+    pub const fn const_or(&self, rhs: BitBoard) -> BitBoard {
+        BitBoard(self.0 | rhs.0)
+    }
+
     pub const fn const_and(&self, rhs: BitBoard) -> BitBoard {
         BitBoard(self.0 & rhs.0)
     }
@@ -354,6 +425,14 @@ impl ops::BitXor<BitBoard> for BitBoard {
     }
 }
 
+impl ops::BitAnd<BitBoard> for BitBoard {
+    type Output = Self;
+
+    fn bitand(self, rhs: BitBoard) -> Self::Output {
+        (self.0 & rhs.0).into()
+    }
+}
+
 impl ops::Shr<u8> for BitBoard {
     type Output = Self;
 
@@ -370,8 +449,17 @@ impl ops::Shl<u8> for BitBoard {
     }
 }
 
+impl ops::Not for BitBoard {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        (!self.0).into()
+    }
+}
+
 impl_op_ex_commutative!(| |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.0 | b)});
 impl_op_ex_commutative!(^ |a: &BitBoard, b: &u64| -> BitBoard {BitBoard::from(a.0 ^ b)});
+impl_op_ex_commutative!(&|a: &BitBoard, b: &u64| -> BitBoard { BitBoard::from(a.0 & b) });
 
 #[cfg(test)]
 mod tests {

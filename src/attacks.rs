@@ -66,6 +66,40 @@ pub fn get_black_pawn_attack(pos: Position) -> BitBoard {
     BLACK_PAWN_ATTACK_BOARD[pos as usize]
 }
 
+pub fn get_white_pawn_move(pos: Position, occ: BitBoard) -> BitBoard {
+    let (row, col) = pos_to_row_col(pos);
+    if row == 0 || occ.bit_set_at(row_col_to_pos(row - 1, col)) {
+        BitBoard::empty()
+    } else {
+        WHITE_PAWN_MOVE_BOARD[pos as usize] & (!occ)
+    }
+}
+
+pub fn get_black_pawn_move(pos: Position, occ: BitBoard) -> BitBoard {
+    let (row, col) = pos_to_row_col(pos);
+    if row == 7 || occ.bit_set_at(row_col_to_pos(row + 1, col)) {
+        BitBoard::empty()
+    } else {
+        BLACK_PAWN_MOVE_BOARD[pos as usize] & (!occ)
+    }
+}
+
+/// Returns attack board of a piece. Panics when an empty piece is passed in.
+pub fn get_attack(pos: Position, occ: BitBoard, piece: Piece) -> BitBoard {
+    use Piece::*;
+
+    match piece {
+        QueenWhite | QueenBlack => get_queen_attack(pos, occ),
+        RookWhite | RookBlack => get_rook_attack(pos, occ),
+        BishopWhite | BishopBlack => get_bishop_attack(pos, occ),
+        KingWhite | KingBlack => get_king_attack(pos),
+        KnightWhite | KnightBlack => get_knight_attack(pos),
+        PawnWhite => get_white_pawn_attack(pos),
+        PawnBlack => get_black_pawn_attack(pos),
+        Empty => panic!("Tried to get attack board of empty piece"),
+    }
+}
+
 // ---------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------
@@ -98,6 +132,9 @@ const MAX_ROOK_ATTACKED_RELEVANT: u8 = 12;
 const MAX_NUM_ROOK_OCCS: usize = 1 << MAX_ROOK_ATTACKED_RELEVANT;
 type RookAttackingTable = [[BitBoard; MAX_NUM_ROOK_OCCS]; 64];
 
+const WHITE_PAWN_HOME_ROW: u8 = 6;
+const BLACK_PAWN_HOME_ROW: u8 = 1;
+
 // ---------------------------------------------------------------------
 // Jumping Attack Boards
 // ---------------------------------------------------------------------
@@ -126,7 +163,7 @@ const fn offset_attack_board<'a, const N: usize>(
         let new_col = col + off_col;
         if in_board(new_row, new_col) {
             // Check guarantees that new_row, new_col are u8
-            res = BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8)).const_xor(res);
+            res = BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8)).const_or(res);
         }
         i += 1;
     }
@@ -173,27 +210,69 @@ make_usize_wrapper!(
 const KING_ATTACK_BOARD: [BitBoard; 64] =
     array_const_fn_init![calculate_king_attack_board_wrapper; 64];
 
+// White Pawn
+// ---------------------
 const fn calculate_white_pawn_attack_board(pos: Position) -> BitBoard {
-    const PAWN_OFFSETS: [(i16, i16); 2] = [(-1, -1), (-1, 1)];
+    let PAWN_OFFSETS = [(-1, -1), (-1, 1)];
     offset_attack_board(pos, PAWN_OFFSETS)
 }
+// Assuming the white pawn was on the home row, this is how he could move
+const fn calculate_white_pawn_move_board(pos: Position) -> BitBoard {
+    let (row, _) = pos_to_row_col(pos);
+    let pawn_offsets = if row == WHITE_PAWN_HOME_ROW {
+        [(-1, 0), (-2, 0)]
+    } else {
+        // Dummy entry to fill array to correct size
+        [(-1, 0), (-1, 0)]
+    };
+    offset_attack_board(pos, pawn_offsets)
+}
+
 make_usize_wrapper!(
     calculate_white_pawn_attack_board_wrapper,
     calculate_white_pawn_attack_board
 );
+make_usize_wrapper!(
+    calculate_white_pawn_move_board_wrapper,
+    calculate_white_pawn_move_board
+);
+// Three arrays for different positions pawns may encounter (naming should say everything)
 const WHITE_PAWN_ATTACK_BOARD: [BitBoard; 64] =
     array_const_fn_init![calculate_white_pawn_attack_board_wrapper; 64];
+const WHITE_PAWN_MOVE_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_white_pawn_move_board_wrapper; 64];
 
+// Black Pawn
+// ---------------------
 const fn calculate_black_pawn_attack_board(pos: Position) -> BitBoard {
-    const PAWN_OFFSETS: [(i16, i16); 2] = [(1, -1), (1, 1)];
+    let PAWN_OFFSETS = [(1, -1), (1, 1)];
     offset_attack_board(pos, PAWN_OFFSETS)
 }
+// Assuming the black pawn was on the home row, this is how he could move
+const fn calculate_black_pawn_move_board(pos: Position) -> BitBoard {
+    let (row, col) = pos_to_row_col(pos);
+    let pawn_offsets = if row == BLACK_PAWN_HOME_ROW {
+        [(1, 0), (2, 0)]
+    } else {
+        // Dummy entry to fill array to correct size
+        [(1, 0), (1, 0)]
+    };
+    offset_attack_board(pos, pawn_offsets)
+}
+
 make_usize_wrapper!(
     calculate_black_pawn_attack_board_wrapper,
     calculate_black_pawn_attack_board
 );
+make_usize_wrapper!(
+    calculate_black_pawn_move_board_wrapper,
+    calculate_black_pawn_move_board
+);
+// Three arrays for different positions pawns may encounter (naming should say everything)
 const BLACK_PAWN_ATTACK_BOARD: [BitBoard; 64] =
     array_const_fn_init![calculate_black_pawn_attack_board_wrapper; 64];
+const BLACK_PAWN_MOVE_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_black_pawn_move_board_wrapper; 64];
 
 // ---------------------------------------------------------------------
 // Sliding Attack Boards
@@ -369,12 +448,6 @@ fn magic_numbers_table_bishop() -> MagicNumbersTable {
     }
     arr
 }
-
-// TODO: Remove
-// lazy_static! {
-//     static ref MAGIC_NUMBERS_BISHOP: Box<MagicNumbersTable> =
-//         Box::new(magic_numbers_table_bishop());
-// }
 
 fn bishop_attacking_table() -> BishopAttackingTable {
     let mut attacking_array: BishopAttackingTable = [[BitBoard::empty(); MAX_NUM_BISHOP_OCCS]; 64];
@@ -571,19 +644,21 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_pawn_attack_board() {
-        assert_eq!(
-            calculate_white_pawn_attack_board(62),
-            BitBoard::from(0b10100000000)
-        );
-        assert_eq!(
-            calculate_black_pawn_attack_board(1),
-            BitBoard::from(0b0000000010100000000000000000000000000000000000000000000000000000)
-        );
-        assert_eq!(
-            calculate_black_pawn_attack_board(0),
-            BitBoard::from(0b0000000001000000000000000000000000000000000000000000000000000000)
-        );
+    fn test_get_pawn_attack_board() {
+        assert_eq!(get_white_pawn_attack(50), bitboard!(41, 43));
+        assert_eq!(get_black_pawn_attack(33), bitboard!(40, 42));
+    }
+
+    #[test]
+    fn test_pawn_move_board() {
+        assert_eq!(get_white_pawn_move(50, bitboard!()), bitboard!(42, 34));
+        assert_eq!(get_white_pawn_move(50, bitboard!(42)), bitboard!());
+        assert_eq!(get_white_pawn_move(50, bitboard!(42)), bitboard!());
+        assert_eq!(get_white_pawn_move(20, bitboard!(42)), bitboard!(12));
+        assert_eq!(get_black_pawn_move(9, bitboard!()), bitboard!(17, 25));
+        assert_eq!(get_black_pawn_move(9, bitboard!(25)), bitboard!(17));
+        assert_eq!(get_black_pawn_move(9, bitboard!(17)), bitboard!());
+        assert_eq!(get_black_pawn_move(33, bitboard!()), bitboard!(41));
     }
 
     #[test]
@@ -780,24 +855,6 @@ mod tests {
             is_id(
                 |_: BitBoard| get_king_attack(p),
                 |_: BitBoard| calculate_king_attack_board(p),
-                random_board,
-            );
-        }
-    }
-
-    #[test]
-    fn test_calc_get_pawn_id() {
-        for p in 0..64 {
-            is_id(
-                |_: BitBoard| get_white_pawn_attack(p),
-                |_: BitBoard| calculate_white_pawn_attack_board(p),
-                random_board,
-            );
-        }
-        for p in 0..64 {
-            is_id(
-                |_: BitBoard| get_black_pawn_attack(p),
-                |_: BitBoard| calculate_black_pawn_attack_board(p),
                 random_board,
             );
         }
