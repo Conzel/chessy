@@ -1,5 +1,6 @@
 use crate::boards::*;
 use crate::game::*;
+use crate::magic_number_tables::{MAGIC_NUMBERS_BISHOP, MAGIC_NUMBERS_ROOK};
 use crate::make_usize_wrapper;
 use crate::pieces::*;
 use array_const_fn_init::array_const_fn_init;
@@ -8,13 +9,66 @@ use lazy_static::lazy_static;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
-// GOALS:
-// * Create Chess Engine:
-//   * Move generator & validator
-//   * Move heuristic
-//   * Search strategy
-// * Include tests
-//
+/// This file provides the attacking boards for all pieces, i.e. for a given piece
+/// type and board position, the attacked board positions form the attack board
+/// as a BitBoard.
+/// Example: Knight on a8 gives
+/// 0 0 0 0 0 0 0 0
+/// 0 0 1 0 0 0 0 0
+/// 0 1 0 0 0 0 0 0
+/// 0 0 0 0 0 0 0 0
+/// 0 0 0 0 0 0 0 0
+/// 0 0 0 0 0 0 0 0
+/// 0 0 0 0 0 0 0 0
+/// 0 0 0 0 0 0 0 0
+
+// ---------------------------------------------------------------------
+// Public Interface
+// ---------------------------------------------------------------------
+
+pub fn get_bishop_attack(pos: Position, occ: BitBoard) -> BitBoard {
+    let masked_occ = BLOCKER_MASKS_BISHOP[pos as usize].const_and(occ);
+    BISHOP_ATTACKING_TABLE[pos as usize][hash_board_to_index(
+        pos,
+        masked_occ,
+        MAGIC_NUMBERS_BISHOP[pos as usize],
+        MAX_BISHOP_ATTACKED_RELEVANT,
+    )]
+}
+
+pub fn get_rook_attack(pos: Position, occ: BitBoard) -> BitBoard {
+    let masked_occ = BLOCKER_MASKS_ROOK[pos as usize].const_and(occ);
+    ROOK_ATTACKING_TABLE[pos as usize][hash_board_to_index(
+        pos,
+        masked_occ,
+        MAGIC_NUMBERS_ROOK[pos as usize],
+        MAX_ROOK_ATTACKED_RELEVANT,
+    )]
+}
+
+pub fn get_queen_attack(pos: Position, occ: BitBoard) -> BitBoard {
+    get_rook_attack(pos, occ) | get_bishop_attack(pos, occ)
+}
+
+pub fn get_knight_attack(pos: Position) -> BitBoard {
+    KNIGHT_ATTACK_BOARD[pos as usize]
+}
+
+pub fn get_king_attack(pos: Position) -> BitBoard {
+    KING_ATTACK_BOARD[pos as usize]
+}
+
+pub fn get_white_pawn_attack(pos: Position) -> BitBoard {
+    WHITE_PAWN_ATTACK_BOARD[pos as usize]
+}
+
+pub fn get_black_pawn_attack(pos: Position) -> BitBoard {
+    BLACK_PAWN_ATTACK_BOARD[pos as usize]
+}
+
+// ---------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------
 
 // For most of this, a board with positions will be helpful for visualizations.
 // Here is an example:
@@ -31,8 +85,6 @@ use rand::{Rng, SeedableRng};
 //    --------------------------------
 //    a   b   c   d   e   f   g   h
 
-const MAGIC_NUMBER_SEED: u64 = 42;
-
 type BlockerMasksTable = [BitBoard; 64];
 type MagicNumbersTable = [u64; 64];
 // Bishop staying on the middle of the board can attack 9 squares, excluding
@@ -45,29 +97,6 @@ type BishopAttackingTable = [[BitBoard; MAX_NUM_BISHOP_OCCS]; 64];
 const MAX_ROOK_ATTACKED_RELEVANT: u8 = 12;
 const MAX_NUM_ROOK_OCCS: usize = 1 << MAX_ROOK_ATTACKED_RELEVANT;
 type RookAttackingTable = [[BitBoard; MAX_NUM_ROOK_OCCS]; 64];
-
-// Move to game
-struct Move {
-    start: Position,
-    end: Position,
-    piece: Piece,
-}
-
-impl Move {
-    fn new(start: Position, end: Position, piece: Piece) -> Self {
-        Move {
-            start: start,
-            end: end,
-            piece: piece,
-        }
-    }
-}
-
-impl BitBoardGame {
-    fn gen_moves() -> Vec<Move> {
-        todo!()
-    }
-}
 
 // ---------------------------------------------------------------------
 // Jumping Attack Boards
@@ -104,8 +133,7 @@ const fn offset_attack_board<'a, const N: usize>(
     res
 }
 
-/// TODO: precompute this in a table
-const fn knight_attack_board(pos: Position) -> BitBoard {
+const fn calculate_knight_attack_board(pos: Position) -> BitBoard {
     const KNIGHT_OFFSETS: [(i16, i16); 8] = [
         (1, 2),
         (2, 1),
@@ -118,9 +146,14 @@ const fn knight_attack_board(pos: Position) -> BitBoard {
     ];
     offset_attack_board(pos, KNIGHT_OFFSETS)
 }
+make_usize_wrapper!(
+    calculate_knight_attack_board_wrapper,
+    calculate_knight_attack_board
+);
+const KNIGHT_ATTACK_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_knight_attack_board_wrapper; 64];
 
-/// TODO: precompute this in a table
-const fn king_attack_board(pos: Position) -> BitBoard {
+const fn calculate_king_attack_board(pos: Position) -> BitBoard {
     const KING_OFFSETS: [(i16, i16); 8] = [
         (0, 1),
         (1, 0),
@@ -133,18 +166,34 @@ const fn king_attack_board(pos: Position) -> BitBoard {
     ];
     offset_attack_board(pos, KING_OFFSETS)
 }
+make_usize_wrapper!(
+    calculate_king_attack_board_wrapper,
+    calculate_king_attack_board
+);
+const KING_ATTACK_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_king_attack_board_wrapper; 64];
 
-/// TODO: precompute this in a table
-const fn white_pawn_attack_board(pos: Position) -> BitBoard {
+const fn calculate_white_pawn_attack_board(pos: Position) -> BitBoard {
     const PAWN_OFFSETS: [(i16, i16); 2] = [(-1, -1), (-1, 1)];
     offset_attack_board(pos, PAWN_OFFSETS)
 }
+make_usize_wrapper!(
+    calculate_white_pawn_attack_board_wrapper,
+    calculate_white_pawn_attack_board
+);
+const WHITE_PAWN_ATTACK_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_white_pawn_attack_board_wrapper; 64];
 
-/// TODO: precompute this in a table
-const fn black_pawn_attack_board(pos: Position) -> BitBoard {
+const fn calculate_black_pawn_attack_board(pos: Position) -> BitBoard {
     const PAWN_OFFSETS: [(i16, i16); 2] = [(1, -1), (1, 1)];
     offset_attack_board(pos, PAWN_OFFSETS)
 }
+make_usize_wrapper!(
+    calculate_black_pawn_attack_board_wrapper,
+    calculate_black_pawn_attack_board
+);
+const BLACK_PAWN_ATTACK_BOARD: [BitBoard; 64] =
+    array_const_fn_init![calculate_black_pawn_attack_board_wrapper; 64];
 
 // ---------------------------------------------------------------------
 // Sliding Attack Boards
@@ -321,10 +370,11 @@ fn magic_numbers_table_bishop() -> MagicNumbersTable {
     arr
 }
 
-lazy_static! {
-    static ref MAGIC_NUMBERS_BISHOP: Box<MagicNumbersTable> =
-        Box::new(magic_numbers_table_bishop());
-}
+// TODO: Remove
+// lazy_static! {
+//     static ref MAGIC_NUMBERS_BISHOP: Box<MagicNumbersTable> =
+//         Box::new(magic_numbers_table_bishop());
+// }
 
 fn bishop_attacking_table() -> BishopAttackingTable {
     let mut attacking_array: BishopAttackingTable = [[BitBoard::empty(); MAX_NUM_BISHOP_OCCS]; 64];
@@ -346,10 +396,34 @@ fn bishop_attacking_table() -> BishopAttackingTable {
     attacking_array
 }
 
-// TODO: Would be cool to do this as const on release and lazy static on debug.
 lazy_static! {
     static ref BISHOP_ATTACKING_TABLE: Box<BishopAttackingTable> =
         Box::new(bishop_attacking_table());
+}
+
+pub fn magic_numbers_to_file(name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs::*;
+    use std::io::*;
+
+    let f = File::create(name)?;
+    let mut writer = BufWriter::new(f);
+
+    let r = &mut rand::thread_rng();
+    // TODO: Can parallelize this
+    write!(writer, "pub const MAGIC_NUMBERS_BISHOP: [u64; 64] = [")?;
+    for p in 0..64 {
+        let magic_num = find_magic_number_bishops(p, r);
+        write!(writer, "{},\n", magic_num)?;
+    }
+    write!(writer, "];\n\n")?;
+
+    write!(writer, "pub const MAGIC_NUMBERS_ROOK: [u64; 64] = [")?;
+    for p in 0..64 {
+        let magic_num = find_magic_number_rooks(p, r);
+        write!(writer, "{},\n", magic_num)?;
+    }
+    write!(writer, "];")?;
+    Ok(())
 }
 
 //  Rooks
@@ -432,9 +506,10 @@ fn magic_numbers_table_rook() -> MagicNumbersTable {
     arr
 }
 
-lazy_static! {
-    static ref MAGIC_NUMBERS_ROOK: Box<MagicNumbersTable> = Box::new(magic_numbers_table_rook());
-}
+//TODO: remve
+// lazy_static! {
+//     static ref MAGIC_NUMBERS_ROOK: Box<MagicNumbersTable> = Box::new(magic_numbers_table_rook());
+// }
 
 fn rook_attacking_table() -> RookAttackingTable {
     let mut attacking_array: RookAttackingTable = [[BitBoard::empty(); MAX_NUM_ROOK_OCCS]; 64];
@@ -462,34 +537,6 @@ lazy_static! {
 }
 
 // ---------------------------------------------------------------------
-// Public Interface
-// ---------------------------------------------------------------------
-
-pub fn get_bishop_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
-    let masked_occ = BLOCKER_MASKS_BISHOP[pos as usize].const_and(occ);
-    BISHOP_ATTACKING_TABLE[pos as usize][hash_board_to_index(
-        pos,
-        masked_occ,
-        MAGIC_NUMBERS_BISHOP[pos as usize],
-        MAX_BISHOP_ATTACKED_RELEVANT,
-    )]
-}
-
-pub fn get_rook_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
-    let masked_occ = BLOCKER_MASKS_ROOK[pos as usize].const_and(occ);
-    ROOK_ATTACKING_TABLE[pos as usize][hash_board_to_index(
-        pos,
-        masked_occ,
-        MAGIC_NUMBERS_ROOK[pos as usize],
-        MAX_ROOK_ATTACKED_RELEVANT,
-    )]
-}
-
-pub fn get_queen_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
-    get_rook_attack_board(pos, occ) | get_bishop_attack_board(pos, occ)
-}
-
-// ---------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------
 
@@ -500,38 +547,41 @@ mod tests {
     use crate::utils::*;
 
     #[test]
-    fn test_knight_attack_board() {
+    fn test_calculate_knight_attack_board() {
         assert_eq!(
-            knight_attack_board(0),
+            calculate_knight_attack_board(0),
             BitBoard::from(0b0000000000100000010000000000000000000000000000000000000000000000)
         );
         assert_eq!(
-            knight_attack_board(27),
+            calculate_knight_attack_board(27),
             BitBoard::from(0b0000000000101000010001000000000001000100001010000000000000000000)
         );
     }
 
     #[test]
-    fn test_king_attack_board() {
+    fn test_calculate_king_attack_board() {
         assert_eq!(
-            king_attack_board(0),
+            calculate_king_attack_board(0),
             BitBoard::from(0b0100000011000000000000000000000000000000000000000000000000000000)
         );
         assert_eq!(
-            king_attack_board(27),
+            calculate_king_attack_board(27),
             BitBoard::from(0b0000000000000000001110000010100000111000000000000000000000000000)
         );
     }
 
     #[test]
-    fn test_pawn_attack_board() {
-        assert_eq!(white_pawn_attack_board(62), BitBoard::from(0b10100000000));
+    fn test_calculate_pawn_attack_board() {
         assert_eq!(
-            black_pawn_attack_board(1),
+            calculate_white_pawn_attack_board(62),
+            BitBoard::from(0b10100000000)
+        );
+        assert_eq!(
+            calculate_black_pawn_attack_board(1),
             BitBoard::from(0b0000000010100000000000000000000000000000000000000000000000000000)
         );
         assert_eq!(
-            black_pawn_attack_board(0),
+            calculate_black_pawn_attack_board(0),
             BitBoard::from(0b0000000001000000000000000000000000000000000000000000000000000000)
         );
     }
@@ -672,12 +722,12 @@ mod tests {
         for p in 0..64 {
             is_id(
                 |x: BitBoard| calculate_attack_board_bishop(p, x),
-                |y: BitBoard| get_bishop_attack_board(p, y),
+                |y: BitBoard| get_bishop_attack(p, y),
                 random_board,
             );
         }
         assert_eq!(
-            get_bishop_attack_board(49, bitboard!(35)),
+            get_bishop_attack(49, bitboard!(35)),
             bitboard!(35, 42, 40, 56, 58)
         );
     }
@@ -690,7 +740,7 @@ mod tests {
         for p in 0..64 {
             is_id(
                 |x: BitBoard| calculate_attack_board_rook(p, x),
-                |y: BitBoard| get_rook_attack_board(p, y),
+                |y: BitBoard| get_rook_attack(p, y),
                 random_board,
             );
         }
@@ -700,16 +750,56 @@ mod tests {
     #[cfg(not(debug_assertions))]
     fn test_get_queen_attack_board() {
         assert_eq!(
-            get_queen_attack_board(0, bitboard!(18, 27)),
+            get_queen_attack(0, bitboard!(18, 27)),
             bitboard!(1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56, 9, 18)
         );
         assert_eq!(
-            get_queen_attack_board(0, bitboard!(1, 8)),
+            get_queen_attack(0, bitboard!(1, 8)),
             bitboard!(1, 8, 9, 18, 27, 36, 45, 54, 63)
         );
         assert_eq!(
-            get_queen_attack_board(0, bitboard!(1, 8, 9, 16, 24)),
+            get_queen_attack(0, bitboard!(1, 8, 9, 16, 24)),
             bitboard!(1, 8, 9)
         );
+    }
+
+    #[test]
+    fn test_calc_get_knight_id() {
+        for p in 0..64 {
+            is_id(
+                |_: BitBoard| get_knight_attack(p),
+                |_: BitBoard| calculate_knight_attack_board(p),
+                random_board,
+            );
+        }
+    }
+
+    #[test]
+    fn test_calc_get_king_id() {
+        for p in 0..64 {
+            is_id(
+                |_: BitBoard| get_king_attack(p),
+                |_: BitBoard| calculate_king_attack_board(p),
+                random_board,
+            );
+        }
+    }
+
+    #[test]
+    fn test_calc_get_pawn_id() {
+        for p in 0..64 {
+            is_id(
+                |_: BitBoard| get_white_pawn_attack(p),
+                |_: BitBoard| calculate_white_pawn_attack_board(p),
+                random_board,
+            );
+        }
+        for p in 0..64 {
+            is_id(
+                |_: BitBoard| get_black_pawn_attack(p),
+                |_: BitBoard| calculate_black_pawn_attack_board(p),
+                random_board,
+            );
+        }
     }
 }

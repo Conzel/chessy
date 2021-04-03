@@ -9,6 +9,7 @@ mod attacks;
 mod boards;
 mod chess_errors;
 mod game;
+mod magic_number_tables;
 mod pieces;
 mod utils;
 
@@ -54,6 +55,5 @@ fn main() {
     println!("{}", g);
     g.make_move(Piece::KnightBlack, 1, 17);
 
-    println!("{}", attacks::get_bishop_attack_board(49, bitboard!(35)));
-    println!("{}", attacks::get_rook_attack_board(49, bitboard!(35)));
+    println!("{}", attacks::get_rook_attack(49, bitboard!(35)));
 }
