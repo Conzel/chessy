@@ -280,7 +280,7 @@ const fn hash_board_to_index(
     (masked_occ.get().wrapping_mul(magic) >> (64 - max_relevant_attacked)) as usize
 }
 
-pub fn find_magic_number_bishops(pos: Position, r: &mut impl Rng) -> u64 {
+fn find_magic_number_bishops(pos: Position, r: &mut impl Rng) -> u64 {
     loop {
         let current_magic = crate::utils::random_u64_few_bits(r);
         if !magic_number_collision_bishop(current_magic, pos) {
@@ -352,16 +352,6 @@ lazy_static! {
         Box::new(bishop_attacking_table());
 }
 
-pub fn get_bishop_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
-    let masked_occ = BLOCKER_MASKS_BISHOP[pos as usize].const_and(occ);
-    BISHOP_ATTACKING_TABLE[pos as usize][hash_board_to_index(
-        pos,
-        masked_occ,
-        MAGIC_NUMBERS_BISHOP[pos as usize],
-        MAX_BISHOP_ATTACKED_RELEVANT,
-    )]
-}
-
 //  Rooks
 // ----------------
 
@@ -402,7 +392,7 @@ const fn calculate_attack_board_rook(pos: Position, occ: BitBoard) -> BitBoard {
 // Copy paste from the Bishop part, but array sizes need to be known at compile time so
 // we cannot just pass them in through the function. And doing the whole part with const generics
 // honestly just looks uglier.
-pub fn find_magic_number_rooks(pos: Position, r: &mut impl Rng) -> u64 {
+fn find_magic_number_rooks(pos: Position, r: &mut impl Rng) -> u64 {
     loop {
         let current_magic = crate::utils::random_u64_few_bits(r);
         if !magic_number_collision_rook(current_magic, pos) {
@@ -416,7 +406,6 @@ pub fn find_magic_number_rooks(pos: Position, r: &mut impl Rng) -> u64 {
 fn magic_number_collision_rook(magic: u64, pos: Position) -> bool {
     let mut i = 0;
     let mut temp_occ_map: [Option<BitBoard>; MAX_NUM_ROOK_OCCS] = [None; MAX_NUM_ROOK_OCCS];
-    let mut collision_detected = false;
 
     while let Some(occ) = all_occupancies(i, pos, &BLOCKER_MASKS_ROOK) {
         i += 1;
@@ -472,6 +461,20 @@ lazy_static! {
     static ref ROOK_ATTACKING_TABLE: Box<RookAttackingTable> = Box::new(rook_attacking_table());
 }
 
+// ---------------------------------------------------------------------
+// Public Interface
+// ---------------------------------------------------------------------
+
+pub fn get_bishop_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
+    let masked_occ = BLOCKER_MASKS_BISHOP[pos as usize].const_and(occ);
+    BISHOP_ATTACKING_TABLE[pos as usize][hash_board_to_index(
+        pos,
+        masked_occ,
+        MAGIC_NUMBERS_BISHOP[pos as usize],
+        MAX_BISHOP_ATTACKED_RELEVANT,
+    )]
+}
+
 pub fn get_rook_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
     let masked_occ = BLOCKER_MASKS_ROOK[pos as usize].const_and(occ);
     ROOK_ATTACKING_TABLE[pos as usize][hash_board_to_index(
@@ -480,6 +483,10 @@ pub fn get_rook_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
         MAGIC_NUMBERS_ROOK[pos as usize],
         MAX_ROOK_ATTACKED_RELEVANT,
     )]
+}
+
+pub fn get_queen_attack_board(pos: Position, occ: BitBoard) -> BitBoard {
+    get_rook_attack_board(pos, occ) | get_bishop_attack_board(pos, occ)
 }
 
 // ---------------------------------------------------------------------
@@ -687,5 +694,22 @@ mod tests {
                 random_board,
             );
         }
+    }
+
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn test_get_queen_attack_board() {
+        assert_eq!(
+            get_queen_attack_board(0, bitboard!(18, 27)),
+            bitboard!(1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56, 9, 18)
+        );
+        assert_eq!(
+            get_queen_attack_board(0, bitboard!(1, 8)),
+            bitboard!(1, 8, 9, 18, 27, 36, 45, 54, 63)
+        );
+        assert_eq!(
+            get_queen_attack_board(0, bitboard!(1, 8, 9, 16, 24)),
+            bitboard!(1, 8, 9)
+        );
     }
 }

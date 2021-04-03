@@ -139,9 +139,8 @@ impl BitBoard {
         self.0
     }
 
-    // Allows access to underlying data – should not be used when possible
     pub const fn bit_set_at(self, pos: u8) -> bool {
-        (self.0 >> (64 - pos - 1)) % 2 == 1
+        self.0 & (0x8000000000000000 >> pos) != 0
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
