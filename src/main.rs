@@ -15,7 +15,8 @@ mod pieces;
 mod utils;
 
 use boards::*;
-use game::*;
+use engine::BitBoardGame;
+use game::Game;
 use pieces::*;
 
 // GENERAL PLAN
@@ -27,7 +28,7 @@ use pieces::*;
 //   ✓ Make Move, update state
 //   Advanced:
 //   * Check legality of move
-// * Include tests
+// ✓ Include tests
 //
 // MIDDLE:
 // * Create Chess Engine:
@@ -51,10 +52,28 @@ use pieces::*;
 // Main
 // ---------------------------------------------
 
-fn main() {
+#[cfg(debug_assertions)]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut g = BitBoardGame::standard_setup();
+    println!("{:?}", g);
+    g.player_move(Piece::KnightWhite, 57, 42)?;
+    println!("{:?}", g);
+    for _ in 0..10 {
+        g.play_random_turn()?;
+        println!("{:?}", g);
+    }
+    Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = BitBoardGame::standard_setup();
     println!("{}", g);
-    g.make_move(Piece::KnightBlack, 1, 17);
-
-    println!("{}", attacks::get_rook_attack(49, bitboard!(35)));
+    g.player_move(Piece::KnightWhite, 57, 42)?;
+    println!("{}", g);
+    for _ in 0..10 {
+        let m = g.play_random_turn()?;
+        println!("Move: {}\n, {}", m, g);
+    }
+    Ok(())
 }

@@ -82,8 +82,8 @@ pub fn pos_to_algebraic(pos: Position) -> ChessResult<String> {
         let (row, col) = pos_to_row_col(pos);
         Ok(format!(
             "{}{}",
-            7 - row,
-            ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col as usize]
+            ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col as usize],
+            8 - row,
         ))
     }
 }
@@ -92,6 +92,7 @@ pub fn pos_to_algebraic(pos: Position) -> ChessResult<String> {
 // PieceBitBoards
 // ---------------------------------------------
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct PieceBitBoards {
     pub pawns: BitBoard,
     pub knights: BitBoard,
@@ -113,6 +114,7 @@ impl PieceBitBoards {
 // MailboxBoard
 // ---------------------------------------------
 
+#[derive(Clone, PartialEq)]
 pub struct MailboxBoard {
     pieces: [Piece; (BOARD_SIZE * BOARD_SIZE) as usize],
 }
@@ -165,6 +167,21 @@ impl MailboxBoard {
 
         Ok(res)
     }
+
+    // Makes a move by moving the piece at start to the piece at end.
+    // Does not check for legality.
+    pub fn make_move(&mut self, start: Position, end: Position) {
+        self.pieces[end as usize] = self.pieces[start as usize];
+        self.pieces[start as usize] = Piece::Empty;
+    }
+}
+
+impl ops::Index<usize> for MailboxBoard {
+    type Output = Piece;
+    fn index<'a>(&'a self, i: usize) -> &'a Piece {
+        debug_assert!(i < 64);
+        &self.pieces[i]
+    }
 }
 
 impl<'a> IntoIterator for &'a MailboxBoard {
@@ -201,13 +218,29 @@ impl BitBoard {
         BitBoard(0)
     }
 
+    /// Returns true if no bit is set in the board
+    pub const fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
     // Allows access to underlying data – should not be used when possible
     pub const fn get(self) -> u64 {
         self.0
     }
 
+    /// Returns true if the bit at position is 1
     pub const fn bit_set_at(self, pos: u8) -> bool {
         self.0 & (0x8000000000000000 >> pos) != 0
+    }
+
+    /// Returns true if the bit at position is 1
+    pub fn set_bit_at(self, pos: u8) -> BitBoard {
+        (self.0 | (0x8000000000000000 >> pos)).into()
+    }
+
+    /// Returns true if the bit at position is 1
+    pub fn unset_bit_at(self, pos: u8) -> BitBoard {
+        (self.0 & !(0x8000000000000000 >> pos)).into()
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
@@ -326,8 +359,7 @@ impl BitBoard {
     ///   01234
     // TODO: Also make this private again
     pub fn make_move(self, start: Position, end: Position) -> BitBoard {
-        // Move implemented via flipping the bits and start and end position
-        self.0 ^ BitBoard::singular(start) ^ BitBoard::singular(end)
+        self.0 & (!BitBoard::singular(start)) | BitBoard::singular(end)
     }
 
     pub const fn const_xor(&self, rhs: BitBoard) -> BitBoard {
@@ -405,6 +437,18 @@ impl Display for MailboxBoard {
     }
 }
 
+impl fmt::Debug for MailboxBoard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Mailbox Board: [\n")?;
+        for (pos, piece) in self.into_iter().enumerate() {
+            if piece != Piece::Empty {
+                write!(f, "At {}: {:?}\n", pos, piece)?;
+            }
+        }
+        write!(f, "]")
+    }
+}
+
 // ---------------------------------------------
 // Operator Impls
 // ---------------------------------------------
@@ -464,6 +508,7 @@ impl_op_ex_commutative!(&|a: &BitBoard, b: &u64| -> BitBoard { BitBoard::from(a.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bitboard;
     use crate::utils::*;
     use rand::prelude::*;
 
@@ -641,5 +686,26 @@ mod tests {
     #[test]
     fn rot_270_const_rot_270_identity() {
         is_id(BitBoard::rotate270_const, BitBoard::rotate270, random_board);
+    }
+
+    #[test]
+    fn test_make_bitboard_move() {
+        assert_eq!(
+            bitboard!(57, 58, 56).make_move(57, 27),
+            bitboard!(27, 58, 56)
+        );
+    }
+
+    #[test]
+    fn make_mailbox_move() {
+        let mut board = MailboxBoard::empty();
+        board.add(25, Piece::PawnWhite).unwrap();
+        board.add(28, Piece::PawnWhite).unwrap();
+        board.make_move(25, 37);
+
+        let mut moved_board_desired = MailboxBoard::empty();
+        moved_board_desired.add(28, Piece::PawnWhite).unwrap();
+        moved_board_desired.add(37, Piece::PawnWhite).unwrap();
+        assert_eq!(board, moved_board_desired);
     }
 }

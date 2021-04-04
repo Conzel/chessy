@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt;
 
 // ---------------------------------------------
@@ -13,6 +14,14 @@ impl From<String> for ChessError {
         ChessError(s)
     }
 }
+
+impl From<&str> for ChessError {
+    fn from(s: &str) -> ChessError {
+        ChessError(s.to_string())
+    }
+}
+
+impl Error for ChessError {}
 
 impl fmt::Display for ChessError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

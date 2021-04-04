@@ -8,6 +8,7 @@ use std::fmt;
 macro_rules! bitboard {
     ( $( $x:expr ),* ) => {
         {
+            #[allow(unused)]
             let mut base = BitBoard::empty();
             $(
                 base = base | BitBoard::singular($x);
@@ -26,12 +27,15 @@ macro_rules! make_usize_wrapper {
     };
 }
 
+// Functions relevant for tests
+#[cfg(test)]
 pub fn id<T>(x: T) -> T {
     x
 }
 
 /// Tests if F and H are identical functions using generated values by G.
 /// Tests 100 cycles.
+#[cfg(test)]
 pub fn is_id<T, F, G, H>(f: F, h: H, g: G)
 where
     F: Fn(T) -> T,
@@ -45,6 +49,7 @@ where
     }
 }
 
+#[cfg(test)]
 pub fn random_board() -> BitBoard {
     let mut rng = thread_rng();
     BitBoard::new(rng.gen_range(std::u64::MIN..std::u64::MAX))

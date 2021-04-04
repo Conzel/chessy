@@ -62,6 +62,28 @@ impl Display for Piece {
     }
 }
 
+impl Color {
+    pub fn opposite(self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+            Color::None => Color::None,
+        }
+    }
+}
+
+impl Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Color::*;
+        let name = match self {
+            White => "White",
+            Black => "Black",
+            _ => "Empty",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 impl Piece {
     pub fn get_color(&self) -> Color {
         use Piece::*;
@@ -77,12 +99,26 @@ impl Piece {
         }
     }
 
+    /// Returns algebraic notational of piece
+    pub fn algebraic(&self) -> &str {
+        use PieceType::*;
+        match self.get_type() {
+            Pawn => "",
+            King => "K",
+            Queen => "Q",
+            Knight => "N",
+            Rook => "R",
+            Bishop => "B",
+            Empty => panic!("Empty Piece has no algebraic depiction"),
+        }
+    }
+
     pub fn get_type(&self) -> PieceType {
         use Piece::*;
 
         match self {
             PawnWhite | PawnBlack => PieceType::Pawn,
-            KnightWhite | KnightBlack => PieceType::King,
+            KnightWhite | KnightBlack => PieceType::Knight,
             BishopWhite | BishopBlack => PieceType::Bishop,
             RookWhite | RookBlack => PieceType::Rook,
             QueenWhite | QueenBlack => PieceType::Queen,
