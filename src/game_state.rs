@@ -28,7 +28,6 @@ pub struct GameState {
     // Bit board showing where all the white pieces are
     all_whites: BitBoard,
     all_blacks: BitBoard,
-    occupancy: BitBoard,
     mailbox_repr: MailboxBoard,
     turn_count: u16,
     current_player: Color,
@@ -93,7 +92,6 @@ impl GameState {
             all_blacks: all_blacks,
             white_pieces: whites,
             black_pieces: blacks,
-            occupancy: all_whites | all_blacks,
             mailbox_repr: mailbox_repr,
             turn_count: 0,
             current_player: Color::White,
@@ -280,7 +278,7 @@ impl GameState {
             piece,
             start,
             end,
-            b
+            b,
         );
         *b = b.make_move(start, end);
     }
@@ -341,7 +339,9 @@ impl GameState {
     fn piece_move_board(&self, pos: Position, piece: Piece) -> BitBoard {
         assert!(piece != Piece::Empty);
 
-        let attack_board = get_attack(pos, self.occupancy, piece);
+        let total_occ = self.all_whites | self.all_blacks;
+
+        let attack_board = get_attack(pos, total_occ, piece);
         let color = piece.get_color();
 
         let same_color_occ = match color {
@@ -352,9 +352,9 @@ impl GameState {
 
         if piece == Piece::PawnWhite || piece == Piece::PawnBlack {
             if color == Color::White {
-                (attack_board & self.all_blacks) | get_white_pawn_move(pos, self.occupancy)
+                (attack_board & self.all_blacks) | get_white_pawn_move(pos, total_occ)
             } else if color == Color::Black {
-                (attack_board & self.all_whites) | get_black_pawn_move(pos, self.occupancy)
+                (attack_board & self.all_whites) | get_black_pawn_move(pos, total_occ)
             } else {
                 panic!("Tried to query empty piece")
             }
@@ -564,7 +564,7 @@ mod tests {
     fn test_make_undo_random_moves() {
         let mut g = GameState::standard_setup();
 
-        for _ in 0..10 {
+        for _ in 0..50 {
             let prev_g = g.clone();
             let mv = g.play_random_turn().unwrap();
             g.undo_move(&mv);

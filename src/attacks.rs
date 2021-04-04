@@ -654,7 +654,9 @@ mod tests {
     #[test]
     fn test_get_pawn_attack_board() {
         assert_eq!(get_white_pawn_attack(50.into()), bitboard!(41, 43));
+        assert_eq!(get_white_pawn_attack(42.into()), bitboard!(33, 35));
         assert_eq!(get_black_pawn_attack(33.into()), bitboard!(40, 42));
+        assert_eq!(get_black_pawn_attack(10.into()), bitboard!(17, 19));
     }
 
     #[test]
@@ -664,13 +666,24 @@ mod tests {
             bitboard!(42, 34)
         );
         assert_eq!(get_white_pawn_move(50.into(), bitboard!(42)), bitboard!());
-        assert_eq!(get_white_pawn_move(50.into(), bitboard!(42)), bitboard!());
+        assert_eq!(
+            get_white_pawn_move(50.into(), bitboard!(34, 43)),
+            bitboard!(42)
+        );
+        assert_eq!(
+            get_white_pawn_move(50.into(), bitboard!(34, 41)),
+            bitboard!(42)
+        );
         assert_eq!(get_white_pawn_move(20.into(), bitboard!(42)), bitboard!(12));
         assert_eq!(
             get_black_pawn_move(9.into(), bitboard!()),
             bitboard!(17, 25)
         );
         assert_eq!(get_black_pawn_move(9.into(), bitboard!(25)), bitboard!(17));
+        assert_eq!(
+            get_black_pawn_move(9.into(), bitboard!(25, 16)),
+            bitboard!(17)
+        );
         assert_eq!(get_black_pawn_move(9.into(), bitboard!(17)), bitboard!());
         assert_eq!(get_black_pawn_move(33.into(), bitboard!()), bitboard!(41));
     }

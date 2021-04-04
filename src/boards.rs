@@ -104,8 +104,9 @@ impl MailboxBoard {
     }
 
     // Makes a move by moving the piece at start to the piece at end.
-    // Does not check for legality.
+    // Not required to check for legality.
     pub fn make_move(&mut self, start: Position, end: Position) {
+        debug_assert!(start != end);
         self.pieces[end] = self.pieces[start];
         self.pieces[start] = Piece::Empty;
     }

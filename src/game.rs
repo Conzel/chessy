@@ -5,15 +5,6 @@ use crate::moves::*;
 use crate::pieces::*;
 use crate::positions::*;
 
-/// An engine is an object that drives a GameState with the corresponding memory
-/// (stack of past moves etc).
-pub trait Engine {
-    fn new(g: GameState) -> Self;
-    fn next(&mut self, m: Move);
-    fn undo(&mut self);
-    fn legal_moves(&self) -> Vec<Move>;
-}
-
 /// An agent is an object that can play chess by choosing moves appropriate to a
 /// current game state.
 pub trait Agent {

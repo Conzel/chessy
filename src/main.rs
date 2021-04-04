@@ -7,6 +7,7 @@ mod agents;
 mod attacks;
 mod boards;
 mod chess_errors;
+mod engine;
 mod game;
 mod game_state;
 mod magic_number_tables;
