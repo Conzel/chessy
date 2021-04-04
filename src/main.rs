@@ -3,38 +3,43 @@
 #[macro_use]
 extern crate impl_ops;
 
+mod agents;
 mod attacks;
 mod boards;
 mod chess_errors;
-mod engine;
 mod game;
+mod game_state;
 mod magic_number_tables;
+mod moves;
 mod pieces;
 mod positions;
 mod utils;
 
+use agents::*;
 use boards::*;
-use engine::BitBoardGame;
-use game::Game;
-use pieces::*;
+use game::*;
+use game_state::GameState;
+use positions::Position;
+use std::io::{stdout, Write};
 use text_io::read;
 
 // GENERAL PLAN
 // The program shall consist of the following parts:
 // START:
 // ✓ Board Representation – BitBox and MailBox
-// * Simple CLI for interactive play. Shall include:
+// ✓ Simple CLI for interactive play. Shall include:
 //   ✓ Print Board state
 //   ✓ Make Move, update state
 //   Advanced:
-//   * Check legality of move
+//   ✓ Check legality of move
 // ✓ Include tests
 //
 // MIDDLE:
 // * Create Chess Engine:
-//   * Move generator & validator
+//   ✓ Move generator & validator
 //   * Move heuristic
 //   * Search strategy
+//   * Advanced Moves (e.p., castling)
 // * Include tests
 //
 // END:
@@ -53,9 +58,9 @@ use text_io::read;
 // ---------------------------------------------
 
 fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
-    let mut g = BitBoardGame::standard_setup();
+    let mut g = GameState::standard_setup();
     println!("{:?}", g);
-    g.player_move(Piece::KnightWhite, 57.into(), 42.into())?;
+    g.player_move(57.into(), 42.into())?;
     println!("{:?}", g);
     for _ in 0..10 {
         g.play_random_turn()?;
@@ -65,9 +70,9 @@ fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn random_play() -> Result<(), Box<dyn std::error::Error>> {
-    let mut g = BitBoardGame::standard_setup();
+    let mut g = GameState::standard_setup();
     println!("{}", g);
-    g.player_move(Piece::KnightWhite, 57.into(), 42.into())?;
+    g.player_move(57.into(), 42.into())?;
     println!("{}", g);
     for _ in 0..10 {
         let m = g.play_random_turn()?;
@@ -76,17 +81,11 @@ fn random_play() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn interactive_play() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Interactive play. Input long algebraic notation (without piece symbol, e.g. f1f3 for Nf3). Enter q for closing the game.");
-    loop {
-        println!("Your turn: ");
-        let input: String = read!();
-        if input == "q" {
-            return Ok(());
-        }
-    }
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    random_play()
+    let mut g = Game::new(
+        SlowAgent::new(GreedyMaterialAgent::new(), 500),
+        SlowAgent::new(GreedyMaterialAgent::new(), 500),
+    );
+    g.play();
+    Ok(())
 }

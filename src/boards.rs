@@ -161,7 +161,6 @@ impl<'a> IntoIterator for &'a MailboxBoard {
 // BitBoard
 // ---------------------------------------------
 
-// TODO: Make this enum private later - we just need it public at the moment for quick debugging.
 #[derive(Clone, Copy, PartialEq)]
 pub struct BitBoard(u64);
 
@@ -185,6 +184,18 @@ impl BitBoard {
     /// Returns true if no bit is set in the board
     pub const fn is_empty(&self) -> bool {
         self.0 == 0
+    }
+
+    /// Returns number of bits set in bit board
+    pub const fn bits_set(self) -> u8 {
+        // Brian Kernighan algorithm
+        let mut count = 0;
+        let mut n = self.0;
+        while n != 0 {
+            n = n & (n - 1);
+            count += 1;
+        }
+        count
     }
 
     // Allows access to underlying data – should not be used when possible
@@ -660,5 +671,13 @@ mod tests {
             .add(37.into(), Piece::PawnWhite)
             .unwrap();
         assert_eq!(board, moved_board_desired);
+    }
+
+    #[test]
+    fn test_count_bits_set() {
+        assert_eq!(bitboard!(12, 14, 15).bits_set(), 3);
+        assert_eq!(bitboard!(0).bits_set(), 1);
+        assert_eq!(bitboard!().bits_set(), 0);
+        assert_eq!(BitBoard::from(0xFFFFFFFFFFFFFFFF).bits_set(), 64);
     }
 }

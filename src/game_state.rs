@@ -7,7 +7,8 @@
 use crate::attacks::*;
 use crate::boards::*;
 use crate::chess_errors::*;
-use crate::game::Game;
+use crate::game::*;
+use crate::moves::*;
 use crate::pieces::*;
 use crate::positions::*;
 use std::fmt::{self, Debug, Display};
@@ -16,11 +17,11 @@ use std::fmt::{self, Debug, Display};
 // BitBoardGame
 // ------------------------------------
 
-// Note on this struct: property access must be highly efficient,
-// so we do not use a hashmap to access the BitBoards for the
-// different pieces. This sadly makes some of the code a bit bloated.
+/// A Game State is an object that represents the current GameState.
+/// Implements basic operations (executing one move forward, backwards, legal move generation)
+/// and information about game statistics.
 #[derive(Clone)]
-pub struct BitBoardGame {
+pub struct GameState {
     // The individual bit boards for the pieces
     white_pieces: PieceBitBoards,
     black_pieces: PieceBitBoards,
@@ -33,13 +34,14 @@ pub struct BitBoardGame {
     current_player: Color,
 }
 
-impl Game for BitBoardGame {
+// Public Interface
+impl GameState {
     // This could be reimplemented with specialized move functions for each piece later.
-    fn player_move(&mut self, piece: Piece, start: Position, end: Position) -> ChessResult<()> {
+    pub fn player_move(&mut self, start: Position, end: Position) -> ChessResult<()> {
         // TODO: Implement different kind of moves and validate moves
-        if piece.get_color() != self.current_player {
-            return Err("Wrong player color".into());
-        }
+        // if piece.get_color() != self.current_player {
+        //     return Err("Wrong player color".into());
+        // }
         let m = self
             .find_player_move(start, end)
             .ok_or(ChessError::from("Illegal move"))?;
@@ -48,7 +50,7 @@ impl Game for BitBoardGame {
     }
 
     /// Returns a game with the figures placed on standard chess starting positions
-    fn standard_setup() -> BitBoardGame {
+    pub fn standard_setup() -> GameState {
         // White Setup
         let pawns: BitBoard = 0b1111111100000000.into();
         let knights: BitBoard = 0b01000010.into();
@@ -86,7 +88,7 @@ impl Game for BitBoardGame {
         let mailbox_repr = MailboxBoard::from_piece_bitboards(&whites, &blacks)
             .expect("Standard setup failed; board in invalid state.");
 
-        BitBoardGame {
+        GameState {
             all_whites: all_whites,
             all_blacks: all_blacks,
             white_pieces: whites,
@@ -99,7 +101,27 @@ impl Game for BitBoardGame {
     }
 }
 
-impl Display for BitBoardGame {
+// Statistical things
+impl GameState {
+    pub fn material_value(&self, side: Color) -> u8 {
+        let p = match side {
+            Color::White => &self.white_pieces,
+            Color::Black => &self.black_pieces,
+            _ => panic!("Tried to get material value of empty color"),
+        };
+
+        p.pawns.bits_set()
+            + 3 * (p.knights.bits_set() + p.bishops.bits_set())
+            + 5 * p.rooks.bits_set()
+            + 9 * p.queens.bits_set()
+    }
+
+    pub fn get_current_player(&self) -> Color {
+        self.current_player
+    }
+}
+
+impl Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -109,7 +131,7 @@ impl Display for BitBoardGame {
     }
 }
 
-impl Debug for BitBoardGame {
+impl Debug for GameState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -125,7 +147,8 @@ impl Debug for BitBoardGame {
     }
 }
 
-impl BitBoardGame {
+// Moving things
+impl GameState {
     fn get_pieceboard(&mut self, p: Piece) -> &mut BitBoard {
         use Piece::*;
         match p {
@@ -146,57 +169,11 @@ impl BitBoardGame {
     }
 }
 
-// TODO: Undo pub again
-#[derive(Debug, Clone)]
-pub struct Move {
-    start: Position,
-    end: Position,
-    piece: Piece,
-    kind: MoveType,
-}
-
-impl fmt::Display for Move {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}{}{}{}",
-            self.piece.algebraic(),
-            self.start,
-            if self.kind == MoveType::Capture {
-                "x"
-            } else {
-                ""
-            },
-            self.end
-        )
-    }
-}
-
-impl Move {
-    fn new(start: Position, end: Position, piece: Piece, kind: MoveType) -> Self {
-        Move {
-            start: start,
-            end: end,
-            piece: piece,
-            kind: kind,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum MoveType {
-    Standard,
-    Capture,
-    EnPassant,
-    Castle,
-    PawnTwostep,
-}
-
 // -------------------------------------
-// Engine Parts
+// Moving impls
 // ------------------------------------
 
-impl BitBoardGame {
+impl GameState {
     /// Returns all possible moves from current game position.
     /// Moves are only possible due to piece movement rules, not necessarily
     /// legal (might leave king in check).
@@ -243,7 +220,7 @@ impl BitBoardGame {
     }
 
     // Makes a move on the board.
-    fn make_move(&mut self, m: &Move) {
+    pub fn make_move(&mut self, m: &Move) {
         // Making the move
         self.move_piece_bitboard(m.piece, m.start, m.end);
 
@@ -376,7 +353,6 @@ impl BitBoardGame {
 mod tests {
     use super::*;
     use crate::bitboard;
-    use crate::game::Game;
 
     // Needs ~ >4 MB stack size to run and also takes a bit long when in Debug mode,
     // so we turned it off here
@@ -428,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_standard_setup() {
-        let g = BitBoardGame::standard_setup();
+        let g = GameState::standard_setup();
         assert_eq!(
             g.white_pieces.pawns,
             bitboard!(48, 49, 50, 51, 52, 53, 54, 55)
@@ -464,10 +440,9 @@ mod tests {
 
     #[test]
     fn test_simple_move() {
-        let mut g = BitBoardGame::standard_setup();
+        let mut g = GameState::standard_setup();
         let prev_g = g.clone();
-        g.player_move(Piece::KnightWhite, 57.into(), 42.into())
-            .unwrap();
+        g.player_move(57.into(), 42.into()).unwrap();
         assert_eq!(
             g.all_whites,
             bitboard!(48, 49, 50, 51, 52, 53, 54, 55, 56, 42, 58, 59, 60, 61, 62, 63)
@@ -485,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_simple_capture() {
-        let mut g = BitBoardGame::standard_setup();
+        let mut g = GameState::standard_setup();
         let prev_g = g.clone();
 
         let mv = Move::new(57.into(), 10.into(), Piece::KnightWhite, MoveType::Capture);
