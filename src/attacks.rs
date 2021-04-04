@@ -3,6 +3,7 @@ use crate::game::*;
 use crate::magic_number_tables::{MAGIC_NUMBERS_BISHOP, MAGIC_NUMBERS_ROOK};
 use crate::make_usize_wrapper;
 use crate::pieces::*;
+use crate::positions::*;
 use array_const_fn_init::array_const_fn_init;
 use array_init::array_init;
 use lazy_static::lazy_static;

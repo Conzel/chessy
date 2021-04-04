@@ -1,7 +1,5 @@
 #![feature(asm)]
 #![feature(const_panic)]
-// #![feature(const_eval_limit)]
-// #![const_eval_limit = "50000000"]
 #[macro_use]
 extern crate impl_ops;
 
@@ -12,12 +10,14 @@ mod engine;
 mod game;
 mod magic_number_tables;
 mod pieces;
+mod positions;
 mod utils;
 
 use boards::*;
 use engine::BitBoardGame;
 use game::Game;
 use pieces::*;
+use text_io::read;
 
 // GENERAL PLAN
 // The program shall consist of the following parts:
@@ -52,8 +52,7 @@ use pieces::*;
 // Main
 // ---------------------------------------------
 
-#[cfg(debug_assertions)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = BitBoardGame::standard_setup();
     println!("{:?}", g);
     g.player_move(Piece::KnightWhite, 57, 42)?;
@@ -65,8 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not(debug_assertions))]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn random_play() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = BitBoardGame::standard_setup();
     println!("{}", g);
     g.player_move(Piece::KnightWhite, 57, 42)?;
@@ -76,4 +74,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Move: {}\n, {}", m, g);
     }
     Ok(())
+}
+
+fn interactive_play() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Interactive play. Input long algebraic notation (without piece symbol, e.g. f1f3 for Nf3). Enter q for closing the game.");
+    loop {
+        println!("Your turn: ");
+        let input: String = read!();
+        if input == "q" {
+            return Ok(());
+        }
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    random_play()
 }

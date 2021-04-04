@@ -1,6 +1,7 @@
 use crate::boards::*;
 use crate::chess_errors::*;
 use crate::pieces::*;
+use crate::positions::*;
 
 pub trait Game: std::fmt::Display {
     /// Returns a game with the chess pieces on the standard positions

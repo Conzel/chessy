@@ -9,6 +9,7 @@ use crate::boards::*;
 use crate::chess_errors::*;
 use crate::game::Game;
 use crate::pieces::*;
+use crate::positions::*;
 use std::fmt::{self, Debug, Display};
 
 // -------------------------------------

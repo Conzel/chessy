@@ -1,5 +1,6 @@
 use crate::chess_errors::*;
 use crate::pieces::*;
+use crate::positions::*;
 use array_init::array_init;
 use std::fmt::{self, Display};
 use std::ops;
@@ -19,73 +20,6 @@ fn bit_vec(i: u64) -> Vec<u8> {
         i_ = i_ / 2;
     }
     res.into_iter().rev().collect()
-}
-
-// ---------------------------------------------
-// Positions
-// ---------------------------------------------
-
-pub type Position = u8;
-
-pub fn pos_from_string(s: &str) -> ChessResult<Position> {
-    // Error is rather big, so we use a closure to avoid copies
-    let err_closure = || -> ChessError { format!("Invalid Chess position {}", s).into() };
-    let mut chars = s.chars();
-
-    let col = chars.next().ok_or_else(err_closure)?;
-    let row = chars
-        .next()
-        .map(|r| r.to_digit(10))
-        .flatten()
-        .ok_or_else(err_closure)?;
-
-    // We need to catch invalid early rows, else we will have a panic on unsigned integer underflow
-    //    Too many characters || row is invalid
-    if chars.next().is_some() || row > 8 {
-        // Too many characters
-        return Err(err_closure());
-    }
-
-    // number part v               v letter part
-    let pos = (8 - row) * 8 + col as u32 - 'a' as u32;
-    if pos >= 8 * 8 {
-        Err(err_closure())
-    } else {
-        Ok(pos as u8)
-    }
-}
-
-/// Returns row and col from position. If the position is illegal, an illegal row and col
-/// will be returned.
-/// Example: Position 63 (H1 in chess board) is mapped to (7,7)
-pub const fn pos_to_row_col(p: Position) -> (u8, u8) {
-    (p / 8, p % 8)
-}
-
-/// Transforms a row and a col to Position on the board.
-/// Row and col must correspond to a legal board position,
-/// else the returned value also doesn't correspond to a legal board position.
-pub const fn row_col_to_pos(row: u8, col: u8) -> Position {
-    row * 8 + col
-}
-
-/// Checks if row and col belong to a legal board position.
-pub const fn in_board(row: i16, col: i16) -> bool {
-    row >= 0 && col >= 0 && row < 8 && col < 8
-}
-
-/// Returns algebraic notation equivalent of chess position. Error if the position is not valid.
-pub fn pos_to_algebraic(pos: Position) -> ChessResult<String> {
-    if pos > 63 {
-        Err("Invalid Position".to_string().into())
-    } else {
-        let (row, col) = pos_to_row_col(pos);
-        Ok(format!(
-            "{}{}",
-            ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col as usize],
-            8 - row,
-        ))
-    }
 }
 
 // ---------------------------------------------
