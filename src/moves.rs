@@ -18,7 +18,7 @@ impl fmt::Display for Move {
             "{}{}{}{}",
             self.piece.algebraic(),
             self.start,
-            if self.kind == MoveType::Capture {
+            if let MoveType::Capture(_) = self.kind {
                 "x"
             } else {
                 ""
@@ -39,10 +39,10 @@ impl Move {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MoveType {
     Standard,
-    Capture,
+    Capture(Piece),
     EnPassant,
     Castle,
     PawnTwostep,

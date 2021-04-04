@@ -20,7 +20,7 @@ use std::fmt::{self, Debug, Display};
 /// A Game State is an object that represents the current GameState.
 /// Implements basic operations (executing one move forward, backwards, legal move generation)
 /// and information about game statistics.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct GameState {
     // The individual bit boards for the pieces
     white_pieces: PieceBitBoards,
@@ -197,7 +197,8 @@ impl GameState {
             for end_pos in Position::all_positions() {
                 if move_board.bit_set_at(end_pos.into()) {
                     let movetype = if enemy_occ.bit_set_at(end_pos) {
-                        MoveType::Capture
+                        let captured_piece = self.mailbox_repr[end_pos];
+                        MoveType::Capture(captured_piece)
                     } else {
                         MoveType::Standard
                     };
@@ -223,29 +224,49 @@ impl GameState {
     pub fn make_move(&mut self, m: &Move) {
         // Making the move
         self.move_piece_bitboard(m.piece, m.start, m.end);
+        self.mailbox_repr.make_move(m.start, m.end);
 
         // Updating our representation
         match m.kind {
-            MoveType::Standard => {
-                self.mailbox_repr.make_move(m.start, m.end);
-                match self.current_player {
-                    Color::White => self.recalculate_all_whites(),
-                    Color::Black => self.recalculate_all_blacks(),
-                    _ => panic!("Empty color at play"),
-                }
-            }
-            MoveType::Capture => {
-                let captured_piece = self.mailbox_repr[m.end];
-                debug_assert!(captured_piece.get_color() != self.current_player);
-                self.capture_piece_bitboard(captured_piece, m.end);
+            MoveType::Standard => match self.current_player {
+                Color::White => self.recalculate_all_whites(),
+                Color::Black => self.recalculate_all_blacks(),
+                _ => panic!("Empty color at play"),
+            },
+            MoveType::Capture(captured) => {
+                debug_assert!(captured.get_color() != self.current_player);
+                self.capture_piece_bitboard(captured, m.end);
 
                 self.recalculate_all_whites();
                 self.recalculate_all_blacks();
-                self.mailbox_repr.make_move(m.start, m.end);
             }
             _ => todo!(),
         }
         self.advance_turn();
+    }
+
+    pub fn undo_move(&mut self, m: &Move) {
+        self.deadvance_turn();
+        self.move_piece_bitboard(m.piece, m.end, m.start);
+        self.mailbox_repr.make_move(m.end, m.start);
+        match m.kind {
+            MoveType::Standard => match self.current_player {
+                Color::White => self.recalculate_all_whites(),
+                Color::Black => self.recalculate_all_blacks(),
+                _ => panic!("Empty color at play"),
+            },
+            MoveType::Capture(captured) => {
+                self.uncapture_piece_bitboard(captured, m.end);
+
+                self.recalculate_all_blacks();
+                self.recalculate_all_whites();
+                self.mailbox_repr.add(m.end, captured).expect(
+                    "Unexpected execution flow in undo move:
+                position already occupied in mailbox",
+                );
+            }
+            _ => todo!(),
+        };
     }
 
     /// Updates the piece bit board corresponding to the given piece by moving the entry
@@ -279,8 +300,26 @@ impl GameState {
         *b = b.unset_bit_at(pos);
     }
 
+    /// Reverse operation to capture_piece_bitboard
+    fn uncapture_piece_bitboard(&mut self, piece: Piece, pos: Position) {
+        let b = self.get_pieceboard(piece);
+        debug_assert!(
+            !b.bit_set_at(pos),
+            "\nTarget piece not set. {}: captured at {}\n{:?}",
+            piece,
+            pos,
+            b
+        );
+        *b = b.set_bit_at(pos);
+    }
+
     fn advance_turn(&mut self) {
         self.turn_count += 1;
+        self.flip_color();
+    }
+
+    fn deadvance_turn(&mut self) {
+        self.turn_count -= 1;
         self.flip_color();
     }
 
@@ -357,9 +396,8 @@ mod tests {
     // Needs ~ >4 MB stack size to run and also takes a bit long when in Debug mode,
     // so we turned it off here
     #[test]
-    #[cfg(not(debug_assertions))]
     fn test_move_boards() {
-        let game = BitBoardGame::standard_setup();
+        let game = GameState::standard_setup();
         assert_eq!(
             game.piece_move_board(57.into(), Piece::KnightWhite),
             bitboard!(40, 42)
@@ -463,7 +501,12 @@ mod tests {
         let mut g = GameState::standard_setup();
         let prev_g = g.clone();
 
-        let mv = Move::new(57.into(), 10.into(), Piece::KnightWhite, MoveType::Capture);
+        let mv = Move::new(
+            57.into(),
+            10.into(),
+            Piece::KnightWhite,
+            MoveType::Capture(Piece::PawnBlack),
+        );
         g.make_move(&mv);
 
         assert_eq!(
@@ -490,5 +533,44 @@ mod tests {
         assert_eq!(g.black_pieces.queens, prev_g.black_pieces.queens);
         assert_eq!(g.black_pieces.rooks, prev_g.black_pieces.rooks);
         assert_eq!(g.black_pieces.bishops, prev_g.black_pieces.bishops);
+    }
+
+    #[test]
+    fn test_undo_capture() {
+        let mut g = GameState::standard_setup();
+        let prev_g = g.clone();
+        let mv = Move::new(
+            57.into(),
+            10.into(),
+            Piece::KnightWhite,
+            MoveType::Capture(Piece::PawnBlack),
+        );
+        g.make_move(&mv);
+        g.undo_move(&mv);
+        assert_eq!(g, prev_g);
+    }
+
+    #[test]
+    fn test_undo_standard_move() {
+        let mut g = GameState::standard_setup();
+        let prev_g = g.clone();
+        let mv = Move::new(49.into(), 41.into(), Piece::PawnWhite, MoveType::Standard);
+        g.make_move(&mv);
+        g.undo_move(&mv);
+        assert_eq!(g, prev_g);
+    }
+
+    #[test]
+    fn test_make_undo_random_moves() {
+        let mut g = GameState::standard_setup();
+
+        for _ in 0..10 {
+            let prev_g = g.clone();
+            let mv = g.play_random_turn().unwrap();
+            g.undo_move(&mv);
+            assert_eq!(g, prev_g, "\nCouldn't undo move \n{:?}\n", mv);
+
+            g.play_random_turn().unwrap();
+        }
     }
 }
