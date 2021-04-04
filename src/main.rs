@@ -20,6 +20,7 @@ use agents::*;
 use boards::*;
 use game::*;
 use game_state::GameState;
+use pieces::Color;
 use positions::Position;
 use std::io::{stdout, Write};
 use text_io::read;
@@ -83,9 +84,15 @@ fn random_play() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let h_black = |g: &GameState| {
+        g.material_value(Color::Black) as i16 - g.material_value(Color::White) as i16
+    };
+    let h_white = |g: &GameState| {
+        g.material_value(Color::White) as i16 - g.material_value(Color::Black) as i16
+    };
     let mut g = Game::new(
-        SlowAgent::new(GreedyMaterialAgent::new(), 500),
-        SlowAgent::new(GreedyMaterialAgent::new(), 500),
+        SlowAgent::new(LookaheadHeuristicAgent::new(h_white, 4), 500),
+        SlowAgent::new(LookaheadHeuristicAgent::new(h_black, 4), 500),
     );
     g.play();
     Ok(())

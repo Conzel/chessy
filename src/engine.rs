@@ -4,7 +4,7 @@ use crate::moves::*;
 
 /// An engine is an object that drives a GameState with the corresponding memory
 /// (stack of past moves etc).
-struct StandardEngine {
+pub struct StandardEngine {
     state: GameState,
     move_stack: Vec<Move>,
 }
@@ -30,5 +30,17 @@ impl StandardEngine {
             .ok_or(ChessError::from("No move left to undo"))?;
         self.state.undo_move(&last_move);
         Ok(())
+    }
+
+    pub fn legal_moves(&self) -> Vec<Move> {
+        self.state.gen_moves()
+    }
+
+    pub fn get_state(&self) -> &GameState {
+        &self.state
+    }
+
+    pub fn get_moves(&self) -> Vec<Move> {
+        self.move_stack.clone()
     }
 }

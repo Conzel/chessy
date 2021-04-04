@@ -112,6 +112,7 @@ impl GameState {
             + 3 * (p.knights.bits_set() + p.bishops.bits_set())
             + 5 * p.rooks.bits_set()
             + 9 * p.queens.bits_set()
+            + 20 * p.kings.bits_set()
     }
 
     pub fn get_current_player(&self) -> Color {

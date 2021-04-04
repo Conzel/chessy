@@ -1,6 +1,8 @@
+use crate::engine::*;
 /// Differing kinds of agents that can play the game
 use crate::game::Agent;
 use crate::game_state::GameState;
+use crate::moves::Move;
 use crate::Position;
 use std::io::{stdout, Write};
 use text_io::read;
@@ -93,5 +95,52 @@ impl<A: Agent> Agent for SlowAgent<A> {
     fn play_move(&self, state: &mut GameState) {
         std::thread::sleep(std::time::Duration::from_millis(self.response_time_millis));
         self.inner.play_move(state)
+    }
+}
+
+pub struct LookaheadHeuristicAgent<H: Fn(&GameState) -> i16> {
+    heuristic: H,
+    lookahead: u8,
+}
+
+impl<H: Fn(&GameState) -> i16> LookaheadHeuristicAgent<H> {
+    pub fn new(heuristic: H, lookahead: u8) -> LookaheadHeuristicAgent<H> {
+        debug_assert!(lookahead > 0);
+        LookaheadHeuristicAgent {
+            heuristic: heuristic,
+            lookahead: lookahead,
+        }
+    }
+
+    fn move_recursive(&self, e: &mut StandardEngine, n: u8) -> (Vec<Move>, i16) {
+        if n == 0 {
+            let h = &self.heuristic;
+            let val = h(e.get_state());
+            (e.get_moves(), val)
+        } else {
+            let mut best_val = i16::MIN;
+            let mut best_moves = vec![];
+
+            for mv in e.legal_moves() {
+                e.next(mv);
+                let (moves, val) = self.move_recursive(e, n - 1);
+                if val > best_val {
+                    best_val = val;
+                    best_moves = moves;
+                }
+                e.undo().expect("Tried to undo empty engine");
+            }
+
+            (best_moves, best_val)
+        }
+    }
+}
+
+impl<H: Fn(&GameState) -> i16> Agent for LookaheadHeuristicAgent<H> {
+    fn play_move(&self, state: &mut GameState) {
+        let start_state = state.clone();
+        let mut engine = StandardEngine::new(start_state);
+        let (moves, _) = self.move_recursive(&mut engine, self.lookahead);
+        state.make_move(&moves[0]);
     }
 }
