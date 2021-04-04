@@ -28,21 +28,21 @@ use rand::{Rng, SeedableRng};
 // ---------------------------------------------------------------------
 
 pub fn get_bishop_attack(pos: Position, occ: BitBoard) -> BitBoard {
-    let masked_occ = BLOCKER_MASKS_BISHOP[pos as usize].const_and(occ);
-    BISHOP_ATTACKING_TABLE[pos as usize][hash_board_to_index(
+    let masked_occ = BLOCKER_MASKS_BISHOP[pos].const_and(occ);
+    BISHOP_ATTACKING_TABLE[pos][hash_board_to_index(
         pos,
         masked_occ,
-        MAGIC_NUMBERS_BISHOP[pos as usize],
+        MAGIC_NUMBERS_BISHOP[pos],
         MAX_BISHOP_ATTACKED_RELEVANT,
     )]
 }
 
 pub fn get_rook_attack(pos: Position, occ: BitBoard) -> BitBoard {
-    let masked_occ = BLOCKER_MASKS_ROOK[pos as usize].const_and(occ);
-    ROOK_ATTACKING_TABLE[pos as usize][hash_board_to_index(
+    let masked_occ = BLOCKER_MASKS_ROOK[pos].const_and(occ);
+    ROOK_ATTACKING_TABLE[pos][hash_board_to_index(
         pos,
         masked_occ,
-        MAGIC_NUMBERS_ROOK[pos as usize],
+        MAGIC_NUMBERS_ROOK[pos],
         MAX_ROOK_ATTACKED_RELEVANT,
     )]
 }
@@ -52,36 +52,36 @@ pub fn get_queen_attack(pos: Position, occ: BitBoard) -> BitBoard {
 }
 
 pub fn get_knight_attack(pos: Position) -> BitBoard {
-    KNIGHT_ATTACK_BOARD[pos as usize]
+    KNIGHT_ATTACK_BOARD[pos]
 }
 
 pub fn get_king_attack(pos: Position) -> BitBoard {
-    KING_ATTACK_BOARD[pos as usize]
+    KING_ATTACK_BOARD[pos]
 }
 
 pub fn get_white_pawn_attack(pos: Position) -> BitBoard {
-    WHITE_PAWN_ATTACK_BOARD[pos as usize]
+    WHITE_PAWN_ATTACK_BOARD[pos]
 }
 
 pub fn get_black_pawn_attack(pos: Position) -> BitBoard {
-    BLACK_PAWN_ATTACK_BOARD[pos as usize]
+    BLACK_PAWN_ATTACK_BOARD[pos]
 }
 
 pub fn get_white_pawn_move(pos: Position, occ: BitBoard) -> BitBoard {
-    let (row, col) = pos_to_row_col(pos);
-    if row == 0 || occ.bit_set_at(row_col_to_pos(row - 1, col)) {
+    let (row, col) = pos.to_row_col();
+    if row == 0 || occ.bit_set_at(Position::from_row_col(row - 1, col)) {
         BitBoard::empty()
     } else {
-        WHITE_PAWN_MOVE_BOARD[pos as usize] & (!occ)
+        WHITE_PAWN_MOVE_BOARD[pos] & (!occ)
     }
 }
 
 pub fn get_black_pawn_move(pos: Position, occ: BitBoard) -> BitBoard {
-    let (row, col) = pos_to_row_col(pos);
-    if row == 7 || occ.bit_set_at(row_col_to_pos(row + 1, col)) {
+    let (row, col) = pos.to_row_col();
+    if row == 7 || occ.bit_set_at(Position::from_row_col(row + 1, col)) {
         BitBoard::empty()
     } else {
-        BLACK_PAWN_MOVE_BOARD[pos as usize] & (!occ)
+        BLACK_PAWN_MOVE_BOARD[pos] & (!occ)
     }
 }
 
@@ -153,7 +153,7 @@ const fn offset_attack_board<'a, const N: usize>(
 ) -> BitBoard {
     // A board that has a 1 at position pos
     let mut res = BitBoard::empty();
-    let (row_u, col_u) = pos_to_row_col(pos);
+    let (row_u, col_u) = pos.to_row_col();
     let (row, col) = (row_u as i16, col_u as i16);
 
     let mut i = 0;
@@ -162,9 +162,10 @@ const fn offset_attack_board<'a, const N: usize>(
         let (off_row, off_col) = offsets[i];
         let new_row = row + off_row;
         let new_col = col + off_col;
-        if in_board(new_row, new_col) {
+        if Position::in_board(new_row, new_col) {
             // Check guarantees that new_row, new_col are u8
-            res = BitBoard::singular(row_col_to_pos(new_row as u8, new_col as u8)).const_or(res);
+            res = BitBoard::singular(Position::const_from_row_col(new_row as u8, new_col as u8))
+                .const_or(res);
         }
         i += 1;
     }
@@ -219,7 +220,7 @@ const fn calculate_white_pawn_attack_board(pos: Position) -> BitBoard {
 }
 // Assuming the white pawn was on the home row, this is how he could move
 const fn calculate_white_pawn_move_board(pos: Position) -> BitBoard {
-    let (row, _) = pos_to_row_col(pos);
+    let (row, _) = pos.to_row_col();
     let pawn_offsets = if row == WHITE_PAWN_HOME_ROW {
         [(-1, 0), (-2, 0)]
     } else {
@@ -251,7 +252,7 @@ const fn calculate_black_pawn_attack_board(pos: Position) -> BitBoard {
 }
 // Assuming the black pawn was on the home row, this is how he could move
 const fn calculate_black_pawn_move_board(pos: Position) -> BitBoard {
-    let (row, col) = pos_to_row_col(pos);
+    let (row, col) = pos.to_row_col();
     let pawn_offsets = if row == BLACK_PAWN_HOME_ROW {
         [(1, 0), (2, 0)]
     } else {
@@ -327,16 +328,17 @@ const fn all_occupancies(
     pos: Position,
     blocker_masks: &BlockerMasksTable,
 ) -> Option<BitBoard> {
-    let blocker_mask = blocker_masks[pos as usize];
+    let blocker_mask = blocker_masks[pos.const_index()];
 
     let mut num_bits_set_board = 0;
     let mut board = BitBoard::empty();
 
     let mut board_pos = 63;
     while board_pos > 0 {
-        if blocker_mask.bit_set_at(board_pos) {
+        let pos = Position::const_new(board_pos);
+        if blocker_mask.bit_set_at(pos) {
             if (idx >> num_bits_set_board) % 2 == 1 {
-                board = board.const_xor(BitBoard::singular(board_pos))
+                board = board.const_xor(BitBoard::singular(pos))
             }
 
             num_bits_set_board += 1;
@@ -364,7 +366,7 @@ const fn calculate_attack_board_sliding(
     occ: BitBoard,
     directions: [(i16, i16); 4],
 ) -> BitBoard {
-    let (row, col) = pos_to_row_col(pos);
+    let (row, col) = pos.to_row_col();
     let mut board = BitBoard::empty();
 
     let mut i = 0;
@@ -374,9 +376,9 @@ const fn calculate_attack_board_sliding(
         let mut new_row = row as i16 + delta_row;
         let mut new_col = col as i16 + delta_col;
 
-        while in_board(new_row, new_col) {
+        while Position::in_board(new_row, new_col) {
             // in_board being true guarantees that new_row and new_col are u8
-            let new_pos = row_col_to_pos(new_row as u8, new_col as u8);
+            let new_pos = Position::const_from_row_col(new_row as u8, new_col as u8);
             board = board.const_xor(BitBoard::singular(new_pos));
             if occ.bit_set_at(new_pos) {
                 // we encountered the first piece in the occupancy and stop scanning in the
@@ -444,8 +446,8 @@ fn magic_number_collision_bishop(magic: u64, pos: Position) -> bool {
 fn magic_numbers_table_bishop() -> MagicNumbersTable {
     let r = &mut rand::thread_rng();
     let mut arr: MagicNumbersTable = [0; 64];
-    for p in 0..64 {
-        arr[p] = find_magic_number_bishops(p as u8, r);
+    for p in Position::all_positions() {
+        arr[p] = find_magic_number_bishops(p, r);
     }
     arr
 }
@@ -459,10 +461,14 @@ fn bishop_attacking_table() -> BishopAttackingTable {
         let mut occ_map: [BitBoard; MAX_NUM_BISHOP_OCCS] = [BitBoard::empty(); MAX_NUM_BISHOP_OCCS];
 
         let mut i = 0;
-        while let Some(occ) = all_occupancies(i, pos, &BLOCKER_MASKS_BISHOP) {
+        while let Some(occ) = all_occupancies(i, pos.into(), &BLOCKER_MASKS_BISHOP) {
             i += 1;
-            occ_map[hash_board_to_index(pos, occ, magic_number, MAX_BISHOP_ATTACKED_RELEVANT)] =
-                calculate_attack_board_bishop(pos, occ);
+            occ_map[hash_board_to_index(
+                pos.into(),
+                occ,
+                magic_number,
+                MAX_BISHOP_ATTACKED_RELEVANT,
+            )] = calculate_attack_board_bishop(pos.into(), occ);
         }
         attacking_array[pos as usize] = occ_map;
         pos += 1;
@@ -486,14 +492,14 @@ pub fn magic_numbers_to_file(name: &str) -> Result<(), Box<dyn std::error::Error
     // TODO: Can parallelize this
     write!(writer, "pub const MAGIC_NUMBERS_BISHOP: [u64; 64] = [")?;
     for p in 0..64 {
-        let magic_num = find_magic_number_bishops(p, r);
+        let magic_num = find_magic_number_bishops(p.into(), r);
         write!(writer, "{},\n", magic_num)?;
     }
     write!(writer, "];\n\n")?;
 
     write!(writer, "pub const MAGIC_NUMBERS_ROOK: [u64; 64] = [")?;
     for p in 0..64 {
-        let magic_num = find_magic_number_rooks(p, r);
+        let magic_num = find_magic_number_rooks(p.into(), r);
         write!(writer, "{},\n", magic_num)?;
     }
     write!(writer, "];")?;
@@ -511,7 +517,7 @@ const fn blocker_mask_rook(pos: Position) -> BitBoard {
         (1,0), (2,0), (3,0), (4,0), (5,0), (6,0), (7,0), 
         (-1,0), (-2,0), (-3,0), (-4,0), (-5,0), (-6,0), (-7,0), 
     ];
-    let (row, col) = pos_to_row_col(pos);
+    let (row, col) = pos.to_row_col();
     // Weakest edge mask, we add more if we can
     let mut edge_mask: u64 = 0xFFFFFFFFFFFFFFFF;
     if row != 0 {
@@ -575,7 +581,7 @@ fn magic_numbers_table_rook() -> MagicNumbersTable {
     let r = &mut rand::thread_rng();
     let mut arr: MagicNumbersTable = [0; 64];
     for p in 0..64 {
-        arr[p] = find_magic_number_rooks(p as u8, r);
+        arr[p] = find_magic_number_rooks(p.into(), r);
     }
     arr
 }
@@ -594,10 +600,11 @@ fn rook_attacking_table() -> RookAttackingTable {
         let mut occ_map: [BitBoard; MAX_NUM_ROOK_OCCS] = [BitBoard::empty(); MAX_NUM_ROOK_OCCS];
 
         let mut i = 0;
-        while let Some(occ) = all_occupancies(i, pos, &BLOCKER_MASKS_ROOK) {
+        while let Some(occ) = all_occupancies(i, pos.into(), &BLOCKER_MASKS_ROOK) {
             i += 1;
-            occ_map[hash_board_to_index(pos, occ, magic_number, MAX_ROOK_ATTACKED_RELEVANT)] =
-                calculate_attack_board_rook(pos, occ);
+            occ_map
+                [hash_board_to_index(pos.into(), occ, magic_number, MAX_ROOK_ATTACKED_RELEVANT)] =
+                calculate_attack_board_rook(pos.into(), occ);
         }
         attacking_array[pos as usize] = occ_map;
         pos += 1;
@@ -623,11 +630,11 @@ mod tests {
     #[test]
     fn test_calculate_knight_attack_board() {
         assert_eq!(
-            calculate_knight_attack_board(0),
+            calculate_knight_attack_board(0.into()),
             BitBoard::from(0b0000000000100000010000000000000000000000000000000000000000000000)
         );
         assert_eq!(
-            calculate_knight_attack_board(27),
+            calculate_knight_attack_board(27.into()),
             BitBoard::from(0b0000000000101000010001000000000001000100001010000000000000000000)
         );
     }
@@ -635,86 +642,95 @@ mod tests {
     #[test]
     fn test_calculate_king_attack_board() {
         assert_eq!(
-            calculate_king_attack_board(0),
+            calculate_king_attack_board(0.into()),
             BitBoard::from(0b0100000011000000000000000000000000000000000000000000000000000000)
         );
         assert_eq!(
-            calculate_king_attack_board(27),
+            calculate_king_attack_board(27.into()),
             BitBoard::from(0b0000000000000000001110000010100000111000000000000000000000000000)
         );
     }
 
     #[test]
     fn test_get_pawn_attack_board() {
-        assert_eq!(get_white_pawn_attack(50), bitboard!(41, 43));
-        assert_eq!(get_black_pawn_attack(33), bitboard!(40, 42));
+        assert_eq!(get_white_pawn_attack(50.into()), bitboard!(41, 43));
+        assert_eq!(get_black_pawn_attack(33.into()), bitboard!(40, 42));
     }
 
     #[test]
     fn test_pawn_move_board() {
-        assert_eq!(get_white_pawn_move(50, bitboard!()), bitboard!(42, 34));
-        assert_eq!(get_white_pawn_move(50, bitboard!(42)), bitboard!());
-        assert_eq!(get_white_pawn_move(50, bitboard!(42)), bitboard!());
-        assert_eq!(get_white_pawn_move(20, bitboard!(42)), bitboard!(12));
-        assert_eq!(get_black_pawn_move(9, bitboard!()), bitboard!(17, 25));
-        assert_eq!(get_black_pawn_move(9, bitboard!(25)), bitboard!(17));
-        assert_eq!(get_black_pawn_move(9, bitboard!(17)), bitboard!());
-        assert_eq!(get_black_pawn_move(33, bitboard!()), bitboard!(41));
+        assert_eq!(
+            get_white_pawn_move(50.into(), bitboard!()),
+            bitboard!(42, 34)
+        );
+        assert_eq!(get_white_pawn_move(50.into(), bitboard!(42)), bitboard!());
+        assert_eq!(get_white_pawn_move(50.into(), bitboard!(42)), bitboard!());
+        assert_eq!(get_white_pawn_move(20.into(), bitboard!(42)), bitboard!(12));
+        assert_eq!(
+            get_black_pawn_move(9.into(), bitboard!()),
+            bitboard!(17, 25)
+        );
+        assert_eq!(get_black_pawn_move(9.into(), bitboard!(25)), bitboard!(17));
+        assert_eq!(get_black_pawn_move(9.into(), bitboard!(17)), bitboard!());
+        assert_eq!(get_black_pawn_move(33.into(), bitboard!()), bitboard!(41));
     }
 
     #[test]
     fn test_blocker_mask_bishop() {
         assert_eq!(
-            blocker_mask_bishop(0),
+            blocker_mask_bishop(0.into()),
             BitBoard::from(0b0000000001000000001000000001000000001000000001000000001000000000)
         );
         assert_eq!(
-            blocker_mask_bishop(9),
+            blocker_mask_bishop(9.into()),
             BitBoard::from(0b0000000000000000001000000001000000001000000001000000001000000000)
         );
         assert_eq!(
-            blocker_mask_bishop(1),
+            blocker_mask_bishop(1.into()),
             BitBoard::from(0b0000000000100000000100000000100000000100000000100000000000000000)
         );
-        assert_eq!(blocker_mask_bishop(17), bitboard!(10, 26, 35, 44, 53));
+        assert_eq!(
+            blocker_mask_bishop(17.into()),
+            bitboard!(10, 26, 35, 44, 53)
+        );
     }
 
     #[test]
     fn test_blocker_mask_rook() {
         assert_eq!(
-            blocker_mask_rook(0),
+            blocker_mask_rook(0.into()),
             bitboard!(1, 2, 3, 4, 5, 6, 8, 16, 24, 32, 40, 48)
         );
         assert_eq!(
-            blocker_mask_rook(7),
+            blocker_mask_rook(7.into()),
             bitboard!(1, 2, 3, 4, 5, 6, 15, 23, 31, 39, 47, 55)
         );
         assert_eq!(
-            blocker_mask_rook(9),
+            blocker_mask_rook(9.into()),
             bitboard!(10, 11, 12, 13, 14, 17, 25, 33, 41, 49)
         );
         assert_eq!(
-            blocker_mask_rook(16),
+            blocker_mask_rook(16.into()),
             bitboard!(8, 24, 32, 40, 48, 17, 18, 19, 20, 21, 22)
         );
         assert_eq!(
-            blocker_mask_rook(23),
+            blocker_mask_rook(23.into()),
             bitboard!(17, 18, 19, 20, 21, 22, 15, 31, 39, 47, 55)
         );
         assert_eq!(
-            blocker_mask_rook(4),
+            blocker_mask_rook(4.into()),
             bitboard!(1, 2, 3, 5, 6, 12, 20, 28, 36, 44, 52)
         );
         assert_eq!(
-            blocker_mask_rook(60),
+            blocker_mask_rook(60.into()),
             bitboard!(57, 58, 59, 61, 62, 12, 20, 28, 36, 44, 52)
         );
         assert_eq!(
-            blocker_mask_rook(30),
+            blocker_mask_rook(30.into()),
             bitboard!(14, 22, 25, 26, 27, 28, 29, 38, 46, 54)
         );
         assert_eq!(
-            blocker_mask_rook(62),
+            blocker_mask_rook(62.into()),
             bitboard!(57, 58, 59, 60, 61, 54, 46, 38, 30, 22, 14)
         );
     }
@@ -722,27 +738,27 @@ mod tests {
     #[test]
     fn test_all_occupanices() {
         assert_eq!(
-            all_occupancies(0b10101, 54, &BLOCKER_MASKS_BISHOP).unwrap(),
+            all_occupancies(0b10101, 54.into(), &BLOCKER_MASKS_BISHOP).unwrap(),
             bitboard!(9, 27, 45)
         );
         assert_eq!(
-            all_occupancies(0b00000, 54, &BLOCKER_MASKS_BISHOP).unwrap(),
+            all_occupancies(0b00000, 54.into(), &BLOCKER_MASKS_BISHOP).unwrap(),
             BitBoard::empty()
         );
         assert_eq!(
-            all_occupancies(0b101010, 63, &BLOCKER_MASKS_BISHOP).unwrap(),
+            all_occupancies(0b101010, 63.into(), &BLOCKER_MASKS_BISHOP).unwrap(),
             bitboard!(9, 27, 45)
         );
         assert_eq!(
-            all_occupancies(0b101010, 0, &BLOCKER_MASKS_ROOK).unwrap(),
+            all_occupancies(0b101010, 0.into(), &BLOCKER_MASKS_ROOK).unwrap(),
             bitboard!(8, 24, 40)
         );
         assert_eq!(
-            all_occupancies(0b010101010, 63, &BLOCKER_MASKS_BISHOP),
+            all_occupancies(0b010101010, 63.into(), &BLOCKER_MASKS_BISHOP),
             None
         );
         assert_eq!(
-            all_occupancies(0b010101010000000, 63, &BLOCKER_MASKS_ROOK),
+            all_occupancies(0b010101010000000, 63.into(), &BLOCKER_MASKS_ROOK),
             None
         );
     }
@@ -750,23 +766,23 @@ mod tests {
     #[test]
     fn test_calc_attack_board_bishop() {
         assert_eq!(
-            calculate_attack_board_bishop(0, bitboard!(18, 27)),
+            calculate_attack_board_bishop(0.into(), bitboard!(18, 27)),
             bitboard!(9, 18)
         );
         assert_eq!(
-            calculate_attack_board_bishop(0, bitboard!(27, 55)),
+            calculate_attack_board_bishop(0.into(), bitboard!(27, 55)),
             bitboard!(9, 18, 27)
         );
         assert_eq!(
-            calculate_attack_board_bishop(0, bitboard!(9, 18, 27, 22, 26, 28)),
+            calculate_attack_board_bishop(0.into(), bitboard!(9, 18, 27, 22, 26, 28)),
             bitboard!(9)
         );
         assert_eq!(
-            calculate_attack_board_bishop(0, bitboard!()),
+            calculate_attack_board_bishop(0.into(), bitboard!()),
             bitboard!(9, 18, 27, 36, 45, 54, 63)
         );
         assert_eq!(
-            calculate_attack_board_bishop(49, bitboard!(35)),
+            calculate_attack_board_bishop(49.into(), bitboard!(35)),
             bitboard!(35, 42, 40, 56, 58)
         );
     }
@@ -774,19 +790,19 @@ mod tests {
     #[test]
     fn test_calc_attack_board_rook() {
         assert_eq!(
-            calculate_attack_board_rook(0, bitboard!(18, 27)),
+            calculate_attack_board_rook(0.into(), bitboard!(18, 27)),
             bitboard!(1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56)
         );
         assert_eq!(
-            calculate_attack_board_rook(0, bitboard!(1, 8)),
+            calculate_attack_board_rook(0.into(), bitboard!(1, 8)),
             bitboard!(1, 8)
         );
         assert_eq!(
-            calculate_attack_board_rook(0, bitboard!(1, 8, 9, 16, 24)),
+            calculate_attack_board_rook(0.into(), bitboard!(1, 8, 9, 16, 24)),
             bitboard!(1, 8)
         );
         assert_eq!(
-            calculate_attack_board_rook(0, bitboard!()),
+            calculate_attack_board_rook(0.into(), bitboard!()),
             bitboard!(1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56)
         );
     }
@@ -797,13 +813,13 @@ mod tests {
     fn test_calc_get_attack_bishop_id() {
         for p in 0..64 {
             is_id(
-                |x: BitBoard| calculate_attack_board_bishop(p, x),
-                |y: BitBoard| get_bishop_attack(p, y),
+                |x: BitBoard| calculate_attack_board_bishop(p.into(), x),
+                |y: BitBoard| get_bishop_attack(p.into(), y),
                 random_board,
             );
         }
         assert_eq!(
-            get_bishop_attack(49, bitboard!(35)),
+            get_bishop_attack(49.into(), bitboard!(35)),
             bitboard!(35, 42, 40, 56, 58)
         );
     }
@@ -815,8 +831,8 @@ mod tests {
     fn test_calc_get_attack_rook_id() {
         for p in 0..64 {
             is_id(
-                |x: BitBoard| calculate_attack_board_rook(p, x),
-                |y: BitBoard| get_rook_attack(p, y),
+                |x: BitBoard| calculate_attack_board_rook(p.into(), x),
+                |y: BitBoard| get_rook_attack(p.into(), y),
                 random_board,
             );
         }
@@ -826,15 +842,15 @@ mod tests {
     #[cfg(not(debug_assertions))]
     fn test_get_queen_attack_board() {
         assert_eq!(
-            get_queen_attack(0, bitboard!(18, 27)),
+            get_queen_attack(0.into(), bitboard!(18, 27)),
             bitboard!(1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 40, 48, 56, 9, 18)
         );
         assert_eq!(
-            get_queen_attack(0, bitboard!(1, 8)),
+            get_queen_attack(0.into(), bitboard!(1, 8)),
             bitboard!(1, 8, 9, 18, 27, 36, 45, 54, 63)
         );
         assert_eq!(
-            get_queen_attack(0, bitboard!(1, 8, 9, 16, 24)),
+            get_queen_attack(0.into(), bitboard!(1, 8, 9, 16, 24)),
             bitboard!(1, 8, 9)
         );
     }
@@ -843,8 +859,8 @@ mod tests {
     fn test_calc_get_knight_id() {
         for p in 0..64 {
             is_id(
-                |_: BitBoard| get_knight_attack(p),
-                |_: BitBoard| calculate_knight_attack_board(p),
+                |_: BitBoard| get_knight_attack(p.into()),
+                |_: BitBoard| calculate_knight_attack_board(p.into()),
                 random_board,
             );
         }
@@ -854,8 +870,8 @@ mod tests {
     fn test_calc_get_king_id() {
         for p in 0..64 {
             is_id(
-                |_: BitBoard| get_king_attack(p),
-                |_: BitBoard| calculate_king_attack_board(p),
+                |_: BitBoard| get_king_attack(p.into()),
+                |_: BitBoard| calculate_king_attack_board(p.into()),
                 random_board,
             );
         }

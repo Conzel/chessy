@@ -161,13 +161,13 @@ impl fmt::Display for Move {
             f,
             "{}{}{}{}",
             self.piece.algebraic(),
-            pos_to_algebraic(self.start).unwrap_or("Invalid".into()),
+            self.start,
             if self.kind == MoveType::Capture {
                 "x"
             } else {
                 ""
             },
-            pos_to_algebraic(self.end).unwrap_or("Invalid".into())
+            self.end
         )
     }
 }
@@ -203,12 +203,12 @@ impl BitBoardGame {
     pub fn gen_moves(&self) -> Vec<Move> {
         let mut res = Vec::new();
 
-        for (start_pos, piece) in self.mailbox_repr.into_iter().enumerate() {
+        for (start_pos, piece) in self.mailbox_repr.into_iter() {
             if piece == Piece::Empty || piece.get_color() != self.current_player {
                 continue;
             }
 
-            let move_board = self.piece_move_board(start_pos as u8, piece);
+            let move_board = self.piece_move_board(start_pos, piece);
 
             if move_board.is_empty() {
                 continue;
@@ -217,14 +217,14 @@ impl BitBoardGame {
             let enemy_occ = self.get_enemy_occ();
 
             // At least one valid move can be made for this piece
-            for end_pos in 0..64 {
-                if move_board.bit_set_at(end_pos) {
+            for end_pos in Position::all_positions() {
+                if move_board.bit_set_at(end_pos.into()) {
                     let movetype = if enemy_occ.bit_set_at(end_pos) {
                         MoveType::Capture
                     } else {
                         MoveType::Standard
                     };
-                    res.push(Move::new(start_pos as u8, end_pos, piece, movetype));
+                    res.push(Move::new(start_pos, end_pos, piece, movetype));
                 }
             }
             // TODO: Check for Castling and E.P.
@@ -258,7 +258,7 @@ impl BitBoardGame {
                 }
             }
             MoveType::Capture => {
-                let captured_piece = self.mailbox_repr[m.end as usize];
+                let captured_piece = self.mailbox_repr[m.end];
                 debug_assert!(captured_piece.get_color() != self.current_player);
                 self.capture_piece_bitboard(captured_piece, m.end);
 
@@ -385,36 +385,45 @@ mod tests {
     fn test_move_boards() {
         let game = BitBoardGame::standard_setup();
         assert_eq!(
-            game.piece_move_board(57, Piece::KnightWhite),
+            game.piece_move_board(57.into(), Piece::KnightWhite),
             bitboard!(40, 42)
         );
-        assert_eq!(game.piece_move_board(56, Piece::RookWhite), bitboard!());
         assert_eq!(
-            game.piece_move_board(56, Piece::RookBlack),
+            game.piece_move_board(56.into(), Piece::RookWhite),
+            bitboard!()
+        );
+        assert_eq!(
+            game.piece_move_board(56.into(), Piece::RookBlack),
             bitboard!(57, 48)
         );
         assert_eq!(
-            game.piece_move_board(51, Piece::PawnWhite),
+            game.piece_move_board(51.into(), Piece::PawnWhite),
             bitboard!(43, 35)
         );
         assert_eq!(
-            game.piece_move_board(19, Piece::PawnWhite),
+            game.piece_move_board(19.into(), Piece::PawnWhite),
             bitboard!(10, 12)
         );
-        assert_eq!(game.piece_move_board(27, Piece::PawnWhite), bitboard!(19));
         assert_eq!(
-            game.piece_move_board(51, Piece::PawnWhite),
+            game.piece_move_board(27.into(), Piece::PawnWhite),
+            bitboard!(19)
+        );
+        assert_eq!(
+            game.piece_move_board(51.into(), Piece::PawnWhite),
             bitboard!(43, 35)
         );
         assert_eq!(
-            game.piece_move_board(11, Piece::PawnBlack),
+            game.piece_move_board(11.into(), Piece::PawnBlack),
             bitboard!(19, 27)
         );
         assert_eq!(
-            game.piece_move_board(43, Piece::PawnBlack),
+            game.piece_move_board(43.into(), Piece::PawnBlack),
             bitboard!(50, 52)
         );
-        assert_eq!(game.piece_move_board(35, Piece::PawnBlack), bitboard!(43));
+        assert_eq!(
+            game.piece_move_board(35.into(), Piece::PawnBlack),
+            bitboard!(43)
+        );
     }
 
     #[test]
@@ -457,7 +466,8 @@ mod tests {
     fn test_simple_move() {
         let mut g = BitBoardGame::standard_setup();
         let prev_g = g.clone();
-        g.player_move(Piece::KnightWhite, 57, 42).unwrap();
+        g.player_move(Piece::KnightWhite, 57.into(), 42.into())
+            .unwrap();
         assert_eq!(
             g.all_whites,
             bitboard!(48, 49, 50, 51, 52, 53, 54, 55, 56, 42, 58, 59, 60, 61, 62, 63)
@@ -478,7 +488,7 @@ mod tests {
         let mut g = BitBoardGame::standard_setup();
         let prev_g = g.clone();
 
-        let mv = Move::new(57, 10, Piece::KnightWhite, MoveType::Capture);
+        let mv = Move::new(57.into(), 10.into(), Piece::KnightWhite, MoveType::Capture);
         g.make_move(&mv);
 
         assert_eq!(

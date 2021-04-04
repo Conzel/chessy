@@ -55,7 +55,7 @@ use text_io::read;
 fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = BitBoardGame::standard_setup();
     println!("{:?}", g);
-    g.player_move(Piece::KnightWhite, 57, 42)?;
+    g.player_move(Piece::KnightWhite, 57.into(), 42.into())?;
     println!("{:?}", g);
     for _ in 0..10 {
         g.play_random_turn()?;
@@ -67,7 +67,7 @@ fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
 fn random_play() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = BitBoardGame::standard_setup();
     println!("{}", g);
-    g.player_move(Piece::KnightWhite, 57, 42)?;
+    g.player_move(Piece::KnightWhite, 57.into(), 42.into())?;
     println!("{}", g);
     for _ in 0..10 {
         let m = g.play_random_turn()?;

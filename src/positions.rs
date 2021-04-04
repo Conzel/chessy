@@ -1,4 +1,7 @@
 use crate::chess_errors::*;
+use std::fmt::{self, Display};
+use std::ops;
+use std::str::FromStr;
 
 // Chessboard positions on a 8x8 board.
 //
@@ -21,65 +24,154 @@ use crate::chess_errors::*;
 // Positions
 // ---------------------------------------------
 
-pub type Position = u8;
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Position(u8);
 
-pub fn pos_from_string(s: &str) -> ChessResult<Position> {
-    // Error is rather big, so we use a closure to avoid copies
-    let err_closure = || -> ChessError { format!("Invalid Chess position {}", s).into() };
-    let mut chars = s.chars();
-
-    let col = chars.next().ok_or_else(err_closure)?;
-    let row = chars
-        .next()
-        .map(|r| r.to_digit(10))
-        .flatten()
-        .ok_or_else(err_closure)?;
-
-    // We need to catch invalid early rows, else we will have a panic on unsigned integer underflow
-    //    Too many characters || row is invalid
-    if chars.next().is_some() || row > 8 {
-        // Too many characters
-        return Err(err_closure());
-    }
-
-    // number part v               v letter part
-    let pos = (8 - row) * 8 + col as u32 - 'a' as u32;
-    if pos >= 8 * 8 {
-        Err(err_closure())
-    } else {
-        Ok(pos as u8)
+impl From<u8> for Position {
+    fn from(u: u8) -> Self {
+        debug_assert!(u < 64, "Invalid position: {}", u);
+        Position(u)
     }
 }
 
-/// Returns row and col from position. If the position is illegal, an illegal row and col
-/// will be returned.
-/// Example: Position 63 (H1 in chess board) is mapped to (7,7)
-pub const fn pos_to_row_col(p: Position) -> (u8, u8) {
-    (p / 8, p % 8)
+impl From<usize> for Position {
+    fn from(u: usize) -> Self {
+        (u as u8).into()
+    }
 }
 
-/// Transforms a row and a col to Position on the board.
-/// Row and col must correspond to a legal board position,
-/// else the returned value also doesn't correspond to a legal board position.
-pub const fn row_col_to_pos(row: u8, col: u8) -> Position {
-    row * 8 + col
+impl From<i32> for Position {
+    fn from(u: i32) -> Self {
+        (u as u8).into()
+    }
 }
 
-/// Checks if row and col belong to a legal board position.
-pub const fn in_board(row: i16, col: i16) -> bool {
-    row >= 0 && col >= 0 && row < 8 && col < 8
+impl FromStr for Position {
+    type Err = ChessError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Error is rather big, so we use a closure to avoid copies
+        let err_closure = || -> ChessError { format!("Invalid Chess position {}", s).into() };
+        let mut chars = s.chars();
+
+        let col = chars.next().ok_or_else(err_closure)?;
+        let row = chars
+            .next()
+            .map(|r| r.to_digit(10))
+            .flatten()
+            .ok_or_else(err_closure)?;
+
+        // We need to catch invalid early rows, else we will have a panic on unsigned integer underflow
+        //    Too many characters || row is invalid
+        if chars.next().is_some() || row > 8 {
+            // Too many characters
+            return Err(err_closure());
+        }
+
+        // number part v               v letter part
+        let pos: u8 = ((8 - row) * 8) as u8 + col as u8 - 'a' as u8;
+        if pos >= 8 * 8 {
+            Err(err_closure())
+        } else {
+            Ok(Position::from(pos))
+        }
+    }
 }
 
-/// Returns algebraic notation equivalent of chess position. Error if the position is not valid.
-pub fn pos_to_algebraic(pos: Position) -> ChessResult<String> {
-    if pos > 63 {
-        Err("Invalid Position".to_string().into())
-    } else {
-        let (row, col) = pos_to_row_col(pos);
-        Ok(format!(
+impl Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (row, col) = self.to_row_col();
+        write!(
+            f,
             "{}{}",
             ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][col as usize],
             8 - row,
-        ))
+        )
     }
 }
+
+impl fmt::Debug for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub struct PositionIterator(u8);
+
+impl Iterator for PositionIterator {
+    type Item = Position;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 > 63 {
+            None
+        } else {
+            self.0 = self.0 + 1u8;
+            Some((self.0 - 1).into())
+        }
+    }
+}
+
+impl Position {
+    /// Returns row and col from position. If the position is illegal, an illegal row and col
+    /// will be returned.
+    /// Example: Position 63 (H1 in chess board) is mapped to (7,7)
+    pub const fn to_row_col(self) -> (u8, u8) {
+        (self.0 / 8, self.0 % 8)
+    }
+
+    /// Need const fn for some tables. Unchecked position, as
+    /// this is not allowed in const fns.
+    pub const fn const_new(u: u8) -> Position {
+        Position(u)
+    }
+
+    /// Transforms a row and a col to Position on the board.
+    /// Row and col must correspond to a legal board position,
+    /// else the returned value also doesn't correspond to a legal board position.
+    pub fn from_row_col(row: u8, col: u8) -> Position {
+        debug_assert!(Position::in_board(row as i16, col as i16));
+        (row * 8 + col).into()
+    }
+
+    /// Transforms a row and a col to Position on the board.
+    /// Row and col must correspond to a legal board position,
+    /// else the returned value also doesn't correspond to a legal board position.
+    pub const fn const_from_row_col(row: u8, col: u8) -> Position {
+        Self::const_new(row * 8 + col)
+    }
+
+    /// Checks if row and col belong to a legal board position.
+    pub const fn in_board(row: i16, col: i16) -> bool {
+        row >= 0 && col >= 0 && row < 8 && col < 8
+    }
+
+    /// Allows access to underlying u8. Should only be used when necessary.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// Allows to iterate over all positions on the board
+    pub fn all_positions() -> PositionIterator {
+        PositionIterator(0)
+    }
+
+    pub const fn const_index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl<T> ops::Index<Position> for [T; 64] {
+    type Output = T;
+
+    fn index(&self, index: Position) -> &T {
+        &self[index.0 as usize]
+    }
+}
+
+impl<T> ops::IndexMut<Position> for [T; 64] {
+    fn index_mut(&mut self, index: Position) -> &mut Self::Output {
+        &mut self[index.0 as usize]
+    }
+}
+
+impl_op_ex_commutative!(+ |a: &Position, b: &u8| -> Position { Position::from(a.0 + b) });

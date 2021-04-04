@@ -47,10 +47,11 @@ impl PieceBitBoards {
 // ---------------------------------------------
 // MailboxBoard
 // ---------------------------------------------
+type MailboxArray = [Piece; (BOARD_SIZE * BOARD_SIZE) as usize];
 
 #[derive(Clone, PartialEq)]
 pub struct MailboxBoard {
-    pieces: [Piece; (BOARD_SIZE * BOARD_SIZE) as usize],
+    pieces: MailboxArray,
 }
 
 impl MailboxBoard {
@@ -61,7 +62,7 @@ impl MailboxBoard {
     }
 
     pub fn add(&mut self, pos: Position, piece: Piece) -> ChessResult<()> {
-        let current = &mut self.pieces[pos as usize];
+        let current = &mut self.pieces[pos];
         if let Piece::Empty = current {
             *current = piece;
             Ok(())
@@ -73,7 +74,7 @@ impl MailboxBoard {
     pub fn add_bitboard(&mut self, b: &BitBoard, piece: Piece) -> ChessResult<()> {
         for (pos, val) in b.bit_vec().iter().enumerate() {
             if *val == 1 {
-                self.add(pos as u8, piece.clone())?
+                self.add(pos.into(), piece.clone())?
             }
         }
         Ok(())
@@ -105,8 +106,8 @@ impl MailboxBoard {
     // Makes a move by moving the piece at start to the piece at end.
     // Does not check for legality.
     pub fn make_move(&mut self, start: Position, end: Position) {
-        self.pieces[end as usize] = self.pieces[start as usize];
-        self.pieces[start as usize] = Piece::Empty;
+        self.pieces[end] = self.pieces[start];
+        self.pieces[start] = Piece::Empty;
     }
 }
 
@@ -118,12 +119,41 @@ impl ops::Index<usize> for MailboxBoard {
     }
 }
 
+impl ops::Index<Position> for MailboxBoard {
+    type Output = Piece;
+    fn index<'a>(&'a self, i: Position) -> &'a Piece {
+        &self.pieces[i]
+    }
+}
+
+pub struct MailboxIterator {
+    current_pos: u8,
+    array_iter: std::array::IntoIter<Piece, 64>,
+}
+
+impl Iterator for MailboxIterator {
+    type Item = (Position, Piece);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let old_pos = self.current_pos;
+        if old_pos > 63 {
+            None
+        } else {
+            self.current_pos = old_pos + 1u8;
+            Some((old_pos.into(), self.array_iter.next()?))
+        }
+    }
+}
+
 impl<'a> IntoIterator for &'a MailboxBoard {
-    type Item = Piece;
-    type IntoIter = std::array::IntoIter<Self::Item, 64>;
+    type Item = (Position, Piece);
+    type IntoIter = MailboxIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        std::array::IntoIter::new(self.pieces)
+        MailboxIterator {
+            current_pos: 0.into(),
+            array_iter: std::array::IntoIter::new(self.pieces),
+        }
     }
 }
 
@@ -145,7 +175,7 @@ impl BitBoard {
     }
 
     pub const fn singular(at: Position) -> BitBoard {
-        BitBoard(0x8000000000000000 >> at)
+        BitBoard(0x8000000000000000 >> at.get())
     }
 
     pub const fn empty() -> BitBoard {
@@ -163,18 +193,18 @@ impl BitBoard {
     }
 
     /// Returns true if the bit at position is 1
-    pub const fn bit_set_at(self, pos: u8) -> bool {
-        self.0 & (0x8000000000000000 >> pos) != 0
+    pub const fn bit_set_at(self, pos: Position) -> bool {
+        self.0 & (0x8000000000000000 >> pos.get()) != 0
     }
 
     /// Returns true if the bit at position is 1
-    pub fn set_bit_at(self, pos: u8) -> BitBoard {
-        (self.0 | (0x8000000000000000 >> pos)).into()
+    pub fn set_bit_at(self, pos: Position) -> BitBoard {
+        (self.0 | (0x8000000000000000 >> pos.get())).into()
     }
 
     /// Returns true if the bit at position is 1
-    pub fn unset_bit_at(self, pos: u8) -> BitBoard {
-        (self.0 & !(0x8000000000000000 >> pos)).into()
+    pub fn unset_bit_at(self, pos: Position) -> BitBoard {
+        (self.0 & !(0x8000000000000000 >> pos.get())).into()
     }
 
     // Could've also been done in a match, but multiple functions is more efficient (saves the enum
@@ -374,7 +404,7 @@ impl Display for MailboxBoard {
 impl fmt::Debug for MailboxBoard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Mailbox Board: [\n")?;
-        for (pos, piece) in self.into_iter().enumerate() {
+        for (pos, piece) in self.into_iter() {
             if piece != Piece::Empty {
                 write!(f, "At {}: {:?}\n", pos, piece)?;
             }
@@ -448,105 +478,90 @@ mod tests {
 
     #[test]
     fn test_pos_from_string() {
-        assert_eq!(pos_from_string("h1").unwrap(), 63);
-        assert_eq!(pos_from_string("a8").unwrap(), 0);
-        assert_eq!(pos_from_string("b6").unwrap(), 17);
-        assert!(pos_from_string("sdlfj").is_err());
-        assert!(pos_from_string("a9").is_err());
+        assert_eq!("h1".parse::<Position>().unwrap().get(), 63);
+        assert_eq!("a8".parse::<Position>().unwrap().get(), 0);
+        assert_eq!("b6".parse::<Position>().unwrap().get(), 17);
+        assert!("sdlfj".parse::<Position>().is_err());
+        assert!("a9".parse::<Position>().is_err());
     }
 
     #[test]
     fn test_pos_row_col_conversion() {
-        assert_eq!(pos_to_row_col(0), (0, 0));
-        assert_eq!(pos_to_row_col(1), (0, 1));
-        assert_eq!(pos_to_row_col(8), (1, 0));
-        assert_eq!(pos_to_row_col(9), (1, 1));
-        let (r1, c1) = pos_to_row_col(9);
-        assert_eq!(row_col_to_pos(r1, c1), 9);
-        let (r2, c2) = pos_to_row_col(23);
-        assert_eq!(row_col_to_pos(r2, c2), 23);
+        assert_eq!(Position::to_row_col(0.into()), (0, 0));
+        assert_eq!(Position::to_row_col(1.into()), (0, 1));
+        assert_eq!(Position::to_row_col(8.into()), (1, 0));
+        assert_eq!(Position::to_row_col(9.into()), (1, 1));
+        let (r1, c1) = Position::to_row_col(9.into());
+        assert_eq!(Position::from_row_col(r1, c1), 9.into());
+        let (r2, c2) = Position::to_row_col(23.into());
+        assert_eq!(Position::const_from_row_col(r2, c2), 23.into());
     }
 
     #[test]
     fn test_bit_set_at() {
-        assert!(BitBoard::from(0b1).bit_set_at(63));
-        assert!(BitBoard::from(0b11).bit_set_at(63));
-        assert!(BitBoard::from(0b11).bit_set_at(62));
-        assert!(!BitBoard::from(0b11).bit_set_at(0));
-        assert!(!BitBoard::from(0b11).bit_set_at(61));
-        assert!(!BitBoard::from(0b11).bit_set_at(58));
+        assert!(BitBoard::from(0b1).bit_set_at(63.into()));
+        assert!(BitBoard::from(0b11).bit_set_at(63.into()));
+        assert!(BitBoard::from(0b11).bit_set_at(62.into()));
+        assert!(!BitBoard::from(0b11).bit_set_at(0.into()));
+        assert!(!BitBoard::from(0b11).bit_set_at(61.into()));
+        assert!(!BitBoard::from(0b11).bit_set_at(58.into()));
     }
 
     #[test]
     fn test_flip_antidiag() {
-        assert_eq!(BitBoard::singular(0).flip_diag(), BitBoard::singular(0));
-        assert_eq!(BitBoard::singular(9).flip_diag(), BitBoard::singular(9));
-        assert_eq!(BitBoard::singular(63).flip_diag(), BitBoard::singular(63));
-        assert_eq!(BitBoard::singular(7).flip_diag(), BitBoard::singular(56));
-        assert_eq!(BitBoard::singular(56).flip_diag(), BitBoard::singular(7));
-        assert_eq!(BitBoard::singular(8).flip_diag(), BitBoard::singular(1));
+        assert_eq!(bitboard!(0).flip_diag(), bitboard!(0));
+        assert_eq!(bitboard!(9).flip_diag(), bitboard!(9));
+        assert_eq!(bitboard!(63).flip_diag(), bitboard!(63));
+        assert_eq!(bitboard!(7).flip_diag(), bitboard!(56));
+        assert_eq!(bitboard!(56).flip_diag(), bitboard!(7));
+        assert_eq!(bitboard!(8).flip_diag(), bitboard!(1));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_antidiag(),
-            BitBoard::singular(23) ^ BitBoard::singular(31)
+            (bitboard!(4) ^ bitboard!(5)).flip_antidiag(),
+            bitboard!(23) ^ bitboard!(31)
         );
     }
 
     #[test]
     fn test_flip_diag() {
-        assert_eq!(
-            BitBoard::singular(0).flip_antidiag(),
-            BitBoard::singular(63)
-        );
-        assert_eq!(
-            BitBoard::singular(9).flip_antidiag(),
-            BitBoard::singular(54)
-        );
-        assert_eq!(
-            BitBoard::singular(63).flip_antidiag(),
-            BitBoard::singular(0)
-        );
-        assert_eq!(BitBoard::singular(7).flip_antidiag(), BitBoard::singular(7));
-        assert_eq!(
-            BitBoard::singular(56).flip_antidiag(),
-            BitBoard::singular(56)
-        );
-        assert_eq!(
-            BitBoard::singular(8).flip_antidiag(),
-            BitBoard::singular(62)
-        );
+        assert_eq!(bitboard!(0).flip_antidiag(), bitboard!(63));
+        assert_eq!(bitboard!(9).flip_antidiag(), bitboard!(54));
+        assert_eq!(bitboard!(63).flip_antidiag(), bitboard!(0));
+        assert_eq!(bitboard!(7).flip_antidiag(), bitboard!(7));
+        assert_eq!(bitboard!(56).flip_antidiag(), bitboard!(56));
+        assert_eq!(bitboard!(8).flip_antidiag(), bitboard!(62));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_diag(),
-            BitBoard::singular(32) ^ BitBoard::singular(40)
+            (bitboard!(4) ^ bitboard!(5)).flip_diag(),
+            bitboard!(32) ^ bitboard!(40)
         );
     }
 
     #[test]
     fn test_rotate_90() {
-        assert_eq!(BitBoard::singular(0).rotate90(), BitBoard::singular(7));
-        assert_eq!(BitBoard::singular(9).rotate90(), BitBoard::singular(14));
-        assert_eq!(BitBoard::singular(63).rotate90(), BitBoard::singular(56));
-        assert_eq!(BitBoard::singular(7).rotate90(), BitBoard::singular(63));
-        assert_eq!(BitBoard::singular(56).rotate90(), BitBoard::singular(0));
+        assert_eq!(bitboard!(0).rotate90(), bitboard!(7));
+        assert_eq!(bitboard!(9).rotate90(), bitboard!(14));
+        assert_eq!(bitboard!(63).rotate90(), bitboard!(56));
+        assert_eq!(bitboard!(7).rotate90(), bitboard!(63));
+        assert_eq!(bitboard!(56).rotate90(), bitboard!(0));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).rotate90(),
-            BitBoard::singular(39) ^ BitBoard::singular(47)
+            (bitboard!(4) ^ bitboard!(5)).rotate90(),
+            bitboard!(39) ^ bitboard!(47)
         );
     }
 
     #[test]
     fn test_rotate_180() {
-        assert_eq!(BitBoard::singular(0).rotate180(), BitBoard::singular(63));
-        assert_eq!(BitBoard::singular(9).rotate180(), BitBoard::singular(54));
-        assert_eq!(BitBoard::singular(63).rotate180(), BitBoard::singular(0));
-        assert_eq!(BitBoard::singular(7).rotate180(), BitBoard::singular(56));
-        assert_eq!(BitBoard::singular(56).rotate180(), BitBoard::singular(7));
+        assert_eq!(bitboard!(0).rotate180(), bitboard!(63));
+        assert_eq!(bitboard!(9).rotate180(), bitboard!(54));
+        assert_eq!(bitboard!(63).rotate180(), bitboard!(0));
+        assert_eq!(bitboard!(7).rotate180(), bitboard!(56));
+        assert_eq!(bitboard!(56).rotate180(), bitboard!(7));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).rotate180(),
-            BitBoard::singular(58) ^ BitBoard::singular(59)
+            (bitboard!(4) ^ bitboard!(5)).rotate180(),
+            bitboard!(58) ^ bitboard!(59)
         );
     }
 
@@ -567,15 +582,15 @@ mod tests {
 
     #[test]
     fn flip_vert() {
-        assert_eq!(BitBoard::singular(0).flip_vert(), BitBoard::singular(7));
-        assert_eq!(BitBoard::singular(9).flip_vert(), BitBoard::singular(14));
-        assert_eq!(BitBoard::singular(63).flip_vert(), BitBoard::singular(56));
-        assert_eq!(BitBoard::singular(7).flip_vert(), BitBoard::singular(0));
-        assert_eq!(BitBoard::singular(56).flip_vert(), BitBoard::singular(63));
+        assert_eq!(bitboard!(0).flip_vert(), bitboard!(7));
+        assert_eq!(bitboard!(9).flip_vert(), bitboard!(14));
+        assert_eq!(bitboard!(63).flip_vert(), bitboard!(56));
+        assert_eq!(bitboard!(7).flip_vert(), bitboard!(0));
+        assert_eq!(bitboard!(56).flip_vert(), bitboard!(63));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_vert(),
-            BitBoard::singular(2) ^ BitBoard::singular(3)
+            (bitboard!(4) ^ bitboard!(5)).flip_vert(),
+            bitboard!(2) ^ bitboard!(3)
         );
     }
 
@@ -586,15 +601,15 @@ mod tests {
 
     #[test]
     fn flip_horz() {
-        assert_eq!(BitBoard::singular(0).flip_horz(), BitBoard::singular(56));
-        assert_eq!(BitBoard::singular(9).flip_horz(), BitBoard::singular(49));
-        assert_eq!(BitBoard::singular(63).flip_horz(), BitBoard::singular(7));
-        assert_eq!(BitBoard::singular(7).flip_horz(), BitBoard::singular(63));
-        assert_eq!(BitBoard::singular(56).flip_horz(), BitBoard::singular(0));
+        assert_eq!(bitboard!(0).flip_horz(), bitboard!(56));
+        assert_eq!(bitboard!(9).flip_horz(), bitboard!(49));
+        assert_eq!(bitboard!(63).flip_horz(), bitboard!(7));
+        assert_eq!(bitboard!(7).flip_horz(), bitboard!(63));
+        assert_eq!(bitboard!(56).flip_horz(), bitboard!(0));
 
         assert_eq!(
-            (BitBoard::singular(4) ^ BitBoard::singular(5)).flip_horz(),
-            BitBoard::singular(60) ^ BitBoard::singular(61)
+            (bitboard!(4) ^ bitboard!(5)).flip_horz(),
+            bitboard!(60) ^ bitboard!(61)
         );
     }
 
@@ -625,7 +640,7 @@ mod tests {
     #[test]
     fn test_make_bitboard_move() {
         assert_eq!(
-            bitboard!(57, 58, 56).make_move(57, 27),
+            bitboard!(57, 58, 56).make_move(57.into(), 27.into()),
             bitboard!(27, 58, 56)
         );
     }
@@ -633,13 +648,17 @@ mod tests {
     #[test]
     fn make_mailbox_move() {
         let mut board = MailboxBoard::empty();
-        board.add(25, Piece::PawnWhite).unwrap();
-        board.add(28, Piece::PawnWhite).unwrap();
-        board.make_move(25, 37);
+        board.add(25.into(), Piece::PawnWhite).unwrap();
+        board.add(28.into(), Piece::PawnWhite).unwrap();
+        board.make_move(25.into(), 37.into());
 
         let mut moved_board_desired = MailboxBoard::empty();
-        moved_board_desired.add(28, Piece::PawnWhite).unwrap();
-        moved_board_desired.add(37, Piece::PawnWhite).unwrap();
+        moved_board_desired
+            .add(28.into(), Piece::PawnWhite)
+            .unwrap();
+        moved_board_desired
+            .add(37.into(), Piece::PawnWhite)
+            .unwrap();
         assert_eq!(board, moved_board_desired);
     }
 }

@@ -11,7 +11,7 @@ macro_rules! bitboard {
             #[allow(unused)]
             let mut base = BitBoard::empty();
             $(
-                base = base | BitBoard::singular($x);
+                base = base | BitBoard::singular(($x as u8).into());
             )*
             base
         }
@@ -22,7 +22,7 @@ macro_rules! bitboard {
 macro_rules! make_usize_wrapper {
     ($func_name:ident, $orig_f:expr) => {
         const fn $func_name(pos: usize) -> BitBoard {
-            $orig_f(pos as u8)
+            $orig_f(Position::const_new(pos as u8))
         }
     };
 }
