@@ -59,30 +59,6 @@ use text_io::read;
 // Main
 // ---------------------------------------------
 
-fn random_play_debug() -> Result<(), Box<dyn std::error::Error>> {
-    let mut g = GameState::standard_setup();
-    println!("{:?}", g);
-    g.player_move(57.into(), 42.into())?;
-    println!("{:?}", g);
-    for _ in 0..10 {
-        g.play_random_turn()?;
-        println!("{:?}", g);
-    }
-    Ok(())
-}
-
-fn random_play() -> Result<(), Box<dyn std::error::Error>> {
-    let mut g = GameState::standard_setup();
-    println!("{}", g);
-    g.player_move(57.into(), 42.into())?;
-    println!("{}", g);
-    for _ in 0..10 {
-        let m = g.play_random_turn()?;
-        println!("Move: {}\n, {}", m, g);
-    }
-    Ok(())
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let h_black = |g: &GameState| {
         g.material_value(Color::Black) as i16 - g.material_value(Color::White) as i16
@@ -91,8 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         g.material_value(Color::White) as i16 - g.material_value(Color::Black) as i16
     };
     let mut g = Game::new(
-        SlowAgent::new(LookaheadHeuristicAgent::new(h_white, 4), 500),
-        SlowAgent::new(LookaheadHeuristicAgent::new(h_black, 4), 500),
+        SlowAgent::new(GreedyMaterialAgent::new(), 500),
+        SlowAgent::new(GreedyMaterialAgent::new(), 500),
     );
     g.play();
     Ok(())

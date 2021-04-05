@@ -2,7 +2,7 @@ use crate::engine::*;
 /// Differing kinds of agents that can play the game
 use crate::game::Agent;
 use crate::game_state::GameState;
-use crate::moves::Move;
+use crate::moves::{Move, PlayerMove};
 use crate::Position;
 use std::io::{stdout, Write};
 use text_io::read;
@@ -16,7 +16,7 @@ impl HumanAgent {
 }
 
 impl Agent for HumanAgent {
-    fn play_move(&self, g: &mut GameState) {
+    fn play_move(&self, g: &GameState) -> PlayerMove {
         println!("Your turn: ");
         print!("From: ");
         stdout().flush().unwrap();
@@ -24,7 +24,7 @@ impl Agent for HumanAgent {
         print!("To: ");
         stdout().flush().unwrap();
         let to: Position = read!();
-        g.player_move(from, to).unwrap();
+        PlayerMove(from, to)
     }
 }
 
@@ -37,8 +37,8 @@ impl RandomAgent {
 }
 
 impl Agent for RandomAgent {
-    fn play_move(&self, state: &mut GameState) {
-        state.play_random_turn().unwrap();
+    fn play_move(&self, state: &GameState) -> PlayerMove {
+        state.clone().play_random_turn().unwrap().into()
     }
 }
 
@@ -51,7 +51,7 @@ impl GreedyMaterialAgent {
 }
 
 impl Agent for GreedyMaterialAgent {
-    fn play_move(&self, state: &mut GameState) {
+    fn play_move(&self, state: &GameState) -> PlayerMove {
         use rand::seq::SliceRandom;
 
         let mut best_move = None;
@@ -73,7 +73,7 @@ impl Agent for GreedyMaterialAgent {
             }
         }
 
-        state.make_move(&best_move.expect("No moves left"));
+        best_move.expect("No moves left").into()
     }
 }
 
@@ -92,7 +92,7 @@ impl<A: Agent> SlowAgent<A> {
 }
 
 impl<A: Agent> Agent for SlowAgent<A> {
-    fn play_move(&self, state: &mut GameState) {
+    fn play_move(&self, state: &GameState) -> PlayerMove {
         std::thread::sleep(std::time::Duration::from_millis(self.response_time_millis));
         self.inner.play_move(state)
     }
@@ -137,10 +137,10 @@ impl<H: Fn(&GameState) -> i16> LookaheadHeuristicAgent<H> {
 }
 
 impl<H: Fn(&GameState) -> i16> Agent for LookaheadHeuristicAgent<H> {
-    fn play_move(&self, state: &mut GameState) {
+    fn play_move(&self, state: &GameState) -> PlayerMove {
         let start_state = state.clone();
         let mut engine = StandardEngine::new(start_state);
         let (moves, _) = self.move_recursive(&mut engine, self.lookahead);
-        state.make_move(&moves[0]);
+        (&moves[0]).into()
     }
 }

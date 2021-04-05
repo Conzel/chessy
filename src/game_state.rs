@@ -36,13 +36,9 @@ pub struct GameState {
 // Public Interface
 impl GameState {
     // This could be reimplemented with specialized move functions for each piece later.
-    pub fn player_move(&mut self, start: Position, end: Position) -> ChessResult<()> {
-        // TODO: Implement different kind of moves and validate moves
-        // if piece.get_color() != self.current_player {
-        //     return Err("Wrong player color".into());
-        // }
+    pub fn player_move(&mut self, pm: &PlayerMove) -> ChessResult<()> {
         let m = self
-            .find_player_move(start, end)
+            .find_player_move(pm)
             .ok_or(ChessError::from("Illegal move"))?;
         self.make_move(&m);
         Ok(())
@@ -367,10 +363,11 @@ impl GameState {
     /// Attemps to find the current player move in all of the legal moves that the engine
     /// can find from the current position. Returns None if the move is not among
     /// the legal moves.
-    fn find_player_move(&self, start: Position, end: Position) -> Option<Move> {
+    fn find_player_move(&self, mv: &PlayerMove) -> Option<Move> {
+        let PlayerMove(start, end) = mv;
         let moves = self.gen_moves();
         for m in moves {
-            if m.start == start && m.end == end {
+            if m.start == *start && m.end == *end {
                 return Some(m);
             }
         }
@@ -481,7 +478,7 @@ mod tests {
     fn test_simple_move() {
         let mut g = GameState::standard_setup();
         let prev_g = g.clone();
-        g.player_move(57.into(), 42.into()).unwrap();
+        g.player_move(&PlayerMove(57.into(), 42.into())).unwrap();
         assert_eq!(
             g.all_whites,
             bitboard!(48, 49, 50, 51, 52, 53, 54, 55, 56, 42, 58, 59, 60, 61, 62, 63)

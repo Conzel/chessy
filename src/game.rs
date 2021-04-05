@@ -8,8 +8,7 @@ use crate::positions::*;
 /// An agent is an object that can play chess by choosing moves appropriate to a
 /// current game state.
 pub trait Agent {
-    // TODO: Change agent definition to always return player moves
-    fn play_move(&self, state: &mut GameState);
+    fn play_move(&self, state: &GameState) -> PlayerMove;
 }
 
 pub struct Game<A1: Agent, A2: Agent> {
@@ -30,9 +29,11 @@ impl<A1: Agent, A2: Agent> Game<A1, A2> {
     pub fn play(&mut self) {
         loop {
             println!("{}", self.state);
-            self.white.play_move(&mut self.state);
+            let white_mv = self.white.play_move(&self.state);
+            self.state.player_move(&white_mv);
             println!("{}", self.state);
-            self.black.play_move(&mut self.state);
+            let black_mv = self.black.play_move(&self.state);
+            self.state.player_move(&black_mv);
         }
     }
 }

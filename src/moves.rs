@@ -3,6 +3,21 @@ use crate::pieces::*;
 use crate::positions::*;
 use std::fmt;
 
+/// Move from ... to ...
+pub struct PlayerMove(pub Position, pub Position);
+
+impl From<Move> for PlayerMove {
+    fn from(mv: Move) -> Self {
+        PlayerMove(mv.start, mv.end)
+    }
+}
+
+impl From<&Move> for PlayerMove {
+    fn from(mv: &Move) -> Self {
+        PlayerMove(mv.start, mv.end)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Move {
     pub start: Position,
