@@ -44,6 +44,10 @@ impl GameState {
         Ok(())
     }
 
+    pub fn player_move_legal(&self, pm: &PlayerMove) -> bool {
+        self.find_player_move(pm).is_some()
+    }
+
     /// Returns a game with the figures placed on standard chess starting positions
     pub fn standard_setup() -> GameState {
         // White Setup
@@ -171,8 +175,10 @@ impl GameState {
 impl GameState {
     /// Returns all possible moves from current game position.
     /// Moves are only possible due to piece movement rules, not necessarily
-    /// legal (might leave king in check).
-    pub fn gen_moves(&self) -> Vec<Move> {
+    /// legal (might leave king in check). If the king is capturable from
+    /// this position, None will be returned (indicating that the last move
+    /// must have been illegal).
+    pub fn gen_moves(&self) -> Option<Vec<Move>> {
         let mut res = Vec::new();
 
         for (start_pos, piece) in self.mailbox_repr.into_iter() {
@@ -193,6 +199,9 @@ impl GameState {
                 if move_board.bit_set_at(end_pos.into()) {
                     let movetype = if enemy_occ.bit_set_at(end_pos) {
                         let captured_piece = self.mailbox_repr[end_pos];
+                        if captured_piece.get_type() == PieceType::King {
+                            return None;
+                        }
                         MoveType::Capture(captured_piece)
                     } else {
                         MoveType::Standard
@@ -202,7 +211,7 @@ impl GameState {
             }
             // TODO: Check for Castling and E.P.
         }
-        res
+        Some(res)
     }
 
     /// Gets occupancy of the enemy of the current player
@@ -362,13 +371,20 @@ impl GameState {
 
     /// Attemps to find the current player move in all of the legal moves that the engine
     /// can find from the current position. Returns None if the move is not among
-    /// the legal moves.
+    /// the legal moves. Ensures that check is not violated.
     fn find_player_move(&self, mv: &PlayerMove) -> Option<Move> {
         let PlayerMove(start, end) = mv;
-        let moves = self.gen_moves();
+        let moves = self.gen_moves()?;
         for m in moves {
             if m.start == *start && m.end == *end {
-                return Some(m);
+                let mut state_copy = self.clone();
+                state_copy.make_move(&m);
+                if state_copy.gen_moves().is_some() {
+                    return Some(m);
+                } else {
+                    // m was illegal
+                    return None;
+                }
             }
         }
         None
@@ -377,10 +393,12 @@ impl GameState {
     pub fn play_random_turn(&mut self) -> ChessResult<Move> {
         use rand::seq::SliceRandom;
         let rng = &mut rand::thread_rng();
-        let moves = &self.gen_moves();
+        let moves = &self
+            .gen_moves()
+            .ok_or(ChessError::from("Previous move was illegal."))?;
         let mv = moves
             .choose(rng)
-            .ok_or(ChessError::from("No playable moves left"))?;
+            .ok_or(ChessError::from("No playable moves left."))?;
         self.make_move(mv);
         Ok(mv.clone())
     }

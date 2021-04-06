@@ -32,7 +32,7 @@ impl StandardEngine {
         Ok(())
     }
 
-    pub fn legal_moves(&self) -> Vec<Move> {
+    pub fn gen_moves(&self) -> Option<Vec<Move>> {
         self.state.gen_moves()
     }
 

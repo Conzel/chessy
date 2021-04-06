@@ -66,8 +66,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let h_white = |g: &GameState| {
         g.material_value(Color::White) as i16 - g.material_value(Color::Black) as i16
     };
+    // let mut g = Game::new(
+    //     SlowAgent::new(GreedyMaterialAgent::new(), 500),
+    //     SlowAgent::new(GreedyMaterialAgent::new(), 500),
+    // );
     let mut g = Game::new(
-        SlowAgent::new(GreedyMaterialAgent::new(), 500),
+        HumanAgent::new(),
         SlowAgent::new(GreedyMaterialAgent::new(), 500),
     );
     g.play();

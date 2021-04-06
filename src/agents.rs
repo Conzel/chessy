@@ -5,7 +5,7 @@ use crate::game_state::GameState;
 use crate::moves::{Move, PlayerMove};
 use crate::Position;
 use std::io::{stdout, Write};
-use text_io::read;
+use text_io::try_read;
 
 pub struct HumanAgent {}
 
@@ -17,14 +17,22 @@ impl HumanAgent {
 
 impl Agent for HumanAgent {
     fn play_move(&self, g: &GameState) -> PlayerMove {
-        println!("Your turn: ");
-        print!("From: ");
-        stdout().flush().unwrap();
-        let from: Position = read!();
-        print!("To: ");
-        stdout().flush().unwrap();
-        let to: Position = read!();
-        PlayerMove(from, to)
+        loop {
+            println!("Your turn: ");
+            print!("From: ");
+            stdout().flush().unwrap();
+            let from: Result<Position, _> = try_read!();
+            print!("To: ");
+            stdout().flush().unwrap();
+            let to: Result<Position, _> = try_read!();
+            if from.is_ok() && to.is_ok() {
+                let pm = PlayerMove(from.unwrap(), to.unwrap());
+                if g.player_move_legal(&pm) {
+                    return pm;
+                }
+            }
+            println!("Illegal move.");
+        }
     }
 }
 
@@ -57,7 +65,7 @@ impl Agent for GreedyMaterialAgent {
         let mut best_move = None;
         let mut best_material_gain: i16 = -255;
         let player_color = state.get_current_player();
-        let mut moves = state.gen_moves();
+        let mut moves = state.gen_moves().unwrap();
         moves.shuffle(&mut rand::thread_rng());
 
         for mv in moves {
@@ -121,14 +129,16 @@ impl<H: Fn(&GameState) -> i16> LookaheadHeuristicAgent<H> {
             let mut best_val = i16::MIN;
             let mut best_moves = vec![];
 
-            for mv in e.legal_moves() {
-                e.next(mv);
-                let (moves, val) = self.move_recursive(e, n - 1);
-                if val > best_val {
-                    best_val = val;
-                    best_moves = moves;
+            if let Some(moves) = e.gen_moves() {
+                for mv in moves {
+                    e.next(mv);
+                    let (moves, val) = self.move_recursive(e, n - 1);
+                    if val > best_val {
+                        best_val = val;
+                        best_moves = moves;
+                    }
+                    e.undo().expect("Tried to undo empty engine");
                 }
-                e.undo().expect("Tried to undo empty engine");
             }
 
             (best_moves, best_val)
