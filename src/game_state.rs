@@ -10,6 +10,7 @@ use crate::chess_errors::*;
 use crate::game::*;
 use crate::moves::*;
 use crate::pieces::*;
+use crate::positional_tables::*;
 use crate::positions::*;
 use std::fmt::{self, Debug, Display};
 
@@ -99,24 +100,97 @@ impl GameState {
     }
 }
 
+/// Valuation result of a board state. Contains one value for white
+/// and one for black
+pub struct BoardValuation(u16, u16);
+
+impl BoardValuation {
+    pub fn white(&self) -> u16 {
+        self.0
+    }
+
+    pub fn black(&self) -> u16 {
+        self.1
+    }
+
+    pub fn value(&self, c: Color) -> u16 {
+        match c {
+            Color::White => self.white(),
+            Color::Black => self.black(),
+            _ => panic!("Tried to get material value of empty color"),
+        }
+    }
+}
+
+impl std::ops::Add for BoardValuation {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0, self.1 + other.1)
+    }
+}
+
 // Statistical things
 impl GameState {
-    pub fn material_value(&self, side: Color) -> u8 {
-        let p = match side {
-            Color::White => &self.white_pieces,
-            Color::Black => &self.black_pieces,
-            _ => panic!("Tried to get material value of empty color"),
-        };
+    fn material_value_piecebit(p: &PieceBitBoards) -> u16 {
+        // TODO: Could pre-calculate this in a table and together with position advantage
+        100 * p.pawns.bits_set() as u16
+            + 320 * (p.knights.bits_set()) as u16
+            + 330 * (p.bishops.bits_set()) as u16
+            + 525 * p.rooks.bits_set() as u16
+            + 1000 * p.queens.bits_set() as u16
+            + 10000 * p.kings.bits_set() as u16
+    }
 
-        p.pawns.bits_set()
-            + 3 * (p.knights.bits_set() + p.bishops.bits_set())
-            + 5 * p.rooks.bits_set()
-            + 9 * p.queens.bits_set()
-            + 20 * p.kings.bits_set()
+    /// Returns material value in centipawns
+    pub fn material_value(&self) -> BoardValuation {
+        BoardValuation(
+            GameState::material_value_piecebit(&self.white_pieces),
+            GameState::material_value_piecebit(&self.black_pieces),
+        )
+    }
+
+    /// Returns positional value of both sides (a lot more efficient to do both in one run)
+    /// Positional value is guaranteed to not make a piece have negative value
+    pub fn positional_value(&self) -> BoardValuation {
+        let mut total_white = 0;
+        let mut total_black = 0;
+
+        // TODO: Scale to end game tables
+        for (pos, piece) in self.mailbox_repr.into_iter() {
+            let c = piece.get_color();
+
+            if c == Color::White {
+                total_white += Self::positional_value_piece_pos(piece, pos);
+            } else if c == Color::Black {
+                total_black += Self::positional_value_piece_pos(piece, pos);
+            }
+        }
+        BoardValuation(total_white, total_black)
     }
 
     pub fn get_current_player(&self) -> Color {
         self.current_player
+    }
+
+    fn positional_value_piece_pos(piece: Piece, pos: Position) -> u16 {
+        use PieceType::*;
+
+        let rel_pos = match piece.get_color() {
+            Color::Black => (64 - pos.get() - 1).into(),
+            Color::White => pos,
+            _ => panic!("Tried to get value of empty colored piece"),
+        };
+
+        match piece.get_type() {
+            Pawn => PAWN_POSITIONAL_TABLE[rel_pos],
+            Bishop => BISHOPS_POSITIONAL_TABLE[rel_pos],
+            Queen => QUEEN_POSITIONAL_TABLE[rel_pos],
+            King => KING_POSITIONAL_TABLE[rel_pos],
+            Rook => ROOKS_POSITIONAL_TABLE[rel_pos],
+            Knight => KNIGHTS_POSITIONAL_TABLE[rel_pos],
+            _ => panic!("Tried to get value of empty piece"),
+        }
     }
 }
 
@@ -193,6 +267,10 @@ impl GameState {
             }
 
             let enemy_occ = self.get_enemy_occ();
+            // TODO: Can we have a more efficient method of scanning
+            // positions?
+            // Idea: Row wise scanning first?
+            // Most inefficient parts of the code right now
 
             // At least one valid move can be made for this piece
             for end_pos in Position::all_positions() {

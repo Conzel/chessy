@@ -4,6 +4,7 @@
 extern crate impl_ops;
 
 mod agents;
+mod algorithms;
 mod attacks;
 mod boards;
 mod chess_errors;
@@ -13,6 +14,7 @@ mod game_state;
 mod magic_number_tables;
 mod moves;
 mod pieces;
+mod positional_tables;
 mod positions;
 mod utils;
 
@@ -60,19 +62,9 @@ use text_io::read;
 // ---------------------------------------------
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let h_black = |g: &GameState| {
-        g.material_value(Color::Black) as i16 - g.material_value(Color::White) as i16
-    };
-    let h_white = |g: &GameState| {
-        g.material_value(Color::White) as i16 - g.material_value(Color::Black) as i16
-    };
-    // let mut g = Game::new(
-    //     SlowAgent::new(GreedyMaterialAgent::new(), 500),
-    //     SlowAgent::new(GreedyMaterialAgent::new(), 500),
-    // );
     let mut g = Game::new(
+        AlphaBetaAgent::new(5, AlphaBetaMaterialPos(Color::White)),
         HumanAgent::new(),
-        SlowAgent::new(GreedyMaterialAgent::new(), 500),
     );
     g.play();
     Ok(())

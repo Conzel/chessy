@@ -1,8 +1,10 @@
+use crate::algorithms::AlphaBetaSearch;
 use crate::engine::*;
 /// Differing kinds of agents that can play the game
 use crate::game::Agent;
 use crate::game_state::GameState;
 use crate::moves::{Move, PlayerMove};
+use crate::pieces::Color;
 use crate::Position;
 use std::io::{stdout, Write};
 use text_io::try_read;
@@ -71,8 +73,10 @@ impl Agent for GreedyMaterialAgent {
         for mv in moves {
             let mut new_state = state.clone();
             new_state.make_move(&mv);
-            let our_material = new_state.material_value(player_color);
-            let enemy_material = new_state.material_value(player_color.opposite());
+            let val = new_state.material_value();
+
+            let our_material = val.value(player_color);
+            let enemy_material = val.value(player_color.opposite());
             let material_gain = our_material as i16 - enemy_material as i16;
 
             if material_gain > best_material_gain {
@@ -152,5 +156,46 @@ impl<H: Fn(&GameState) -> i16> Agent for LookaheadHeuristicAgent<H> {
         let mut engine = StandardEngine::new(start_state);
         let (moves, _) = self.move_recursive(&mut engine, self.lookahead);
         (&moves[0]).into()
+    }
+}
+
+pub struct AlphaBetaAgent<AB: AlphaBetaSearch> {
+    depth: u8,
+    ab_searcher: AB,
+}
+
+impl<AB: AlphaBetaSearch> AlphaBetaAgent<AB> {
+    pub fn new(depth: u8, ab_searcher: AB) -> Self {
+        AlphaBetaAgent {
+            depth: depth,
+            ab_searcher: ab_searcher,
+        }
+    }
+}
+
+pub struct AlphaBetaMaterial(pub Color);
+
+impl AlphaBetaSearch for AlphaBetaMaterial {
+    fn score(&self, g: &GameState) -> i32 {
+        let val = g.material_value();
+        return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
+    }
+}
+
+pub struct AlphaBetaMaterialPos(pub Color);
+impl AlphaBetaSearch for AlphaBetaMaterialPos {
+    fn score(&self, g: &GameState) -> i32 {
+        let val = g.material_value() + g.positional_value();
+        return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
+    }
+}
+
+impl<AB: AlphaBetaSearch> Agent for AlphaBetaAgent<AB> {
+    fn play_move(&self, state: &GameState) -> PlayerMove {
+        let engine = StandardEngine::new(state.clone());
+        self.ab_searcher
+            .alphabeta(&engine, self.depth.into())
+            .unwrap()
+            .into()
     }
 }

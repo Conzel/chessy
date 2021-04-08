@@ -18,6 +18,12 @@ impl From<&Move> for PlayerMove {
     }
 }
 
+impl fmt::Display for PlayerMove {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.0, self.1)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Move {
     pub start: Position,

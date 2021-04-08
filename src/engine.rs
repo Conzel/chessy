@@ -1,9 +1,11 @@
 use crate::chess_errors::*;
 use crate::game_state::GameState;
 use crate::moves::*;
+use crate::pieces::Color;
 
 /// An engine is an object that drives a GameState with the corresponding memory
 /// (stack of past moves etc).
+#[derive(Clone)]
 pub struct StandardEngine {
     state: GameState,
     move_stack: Vec<Move>,

@@ -30,10 +30,16 @@ impl<A1: Agent, A2: Agent> Game<A1, A2> {
         loop {
             println!("{}", self.state);
             let white_mv = self.white.play_move(&self.state);
-            self.state.player_move(&white_mv);
+            println!("{}", white_mv);
+            self.state
+                .player_move(&white_mv)
+                .expect(&format!("Illegal move tried: {}", white_mv));
             println!("{}", self.state);
             let black_mv = self.black.play_move(&self.state);
-            self.state.player_move(&black_mv);
+            println!("{}", black_mv);
+            self.state
+                .player_move(&black_mv)
+                .expect(&format!("Illegal move tried: {}", black_mv));
         }
     }
 }
