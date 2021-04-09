@@ -14,6 +14,26 @@ use std::fmt::{self, Debug, Display};
 
 type Turn = u16;
 
+/// Gives information about the outcome of the game
+#[derive(Clone, Debug, PartialEq)]
+pub enum GameOutcome {
+    Running,
+    Stalemate,
+    Victory(Color),
+    Invalid,
+}
+
+impl Display for GameOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GameOutcome::Running => write!(f, "Running..."),
+            GameOutcome::Stalemate => write!(f, "Stalemate."),
+            GameOutcome::Victory(c) => write!(f, "Checkmate. {} is victorious.", c),
+            GameOutcome::Invalid => write!(f, "Game was found in an invalid state."),
+        }
+    }
+}
+
 /// A Game State is an object that represents the current GameState.
 /// Implements basic operations (executing one move forward, backwards, legal move generation)
 /// and information about game statistics.
@@ -95,6 +115,27 @@ impl GameState {
             turn_count: 0,
             current_player: Color::White,
             castling_info: CastlingInformation::at_start(),
+        }
+    }
+
+    pub fn outcome(&self) -> GameOutcome {
+        use GameOutcome::*;
+
+        let legal_moves = self.legal_moves();
+
+        if legal_moves.is_err() {
+            Invalid
+        } else if self.legal_moves().unwrap().len() > 0 {
+            Running
+        } else {
+            let mut game_copy = self.clone();
+            game_copy.advance_turn();
+
+            if game_copy.gen_moves().is_none() {
+                Victory(game_copy.current_player)
+            } else {
+                Stalemate
+            }
         }
     }
 }
@@ -359,6 +400,18 @@ impl GameState {
         // TODO: Check E.P.
         // TODO: Move preordering
         Some(res)
+    }
+
+    // Returns all legal moves from the current position.
+    // Error if the board was in an illegal state before
+    pub fn legal_moves(&self) -> ChessResult<Vec<Move>> {
+        let candidates = self
+            .gen_moves()
+            .ok_or(ChessError::from("Board was in an illegal state: {:?}"))?;
+        Ok(candidates
+            .into_iter()
+            .filter(|mv: &Move| self.player_move_legal(&mv.clone().into()))
+            .collect())
     }
 
     /// Gets occupancy of the enemy of the current player

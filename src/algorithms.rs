@@ -17,7 +17,10 @@ pub trait AlphaBetaSearch {
         let mut engine_copy = engine.clone();
 
         // TODO: Handle this option correctly
-        for mv in engine.gen_moves()? {
+        for mv in engine.gen_moves().expect(
+            "Unexpected game state: 
+                                            Previous move was illegal",
+        ) {
             engine_copy.next(mv.clone());
 
             let move_val = self.alphabeta_helper(&mut engine_copy, n - 1, alpha_, beta_, false);

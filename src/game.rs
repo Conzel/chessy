@@ -27,20 +27,28 @@ impl<A1: Agent, A2: Agent> Game<A1, A2> {
     }
 
     pub fn play(&mut self) {
+        let mut current = Color::White;
         loop {
-            println!("{}", self.state);
-            let white_mv = self.white.play_move(&self.state);
-            println!("{}", white_mv);
-            self.state
-                .player_move(&white_mv)
-                .expect(&format!("Illegal move tried: {}", white_mv));
-            println!("{}", self.state);
-
-            let black_mv = self.black.play_move(&self.state);
-            println!("{}", black_mv);
-            self.state
-                .player_move(&black_mv)
-                .expect(&format!("Illegal move tried: {}", black_mv));
+            let outcome = self.make_halfturn(current);
+            current = current.opposite();
+            if outcome != GameOutcome::Running {
+                println!("{}\nGame was finished: {}", self.state, outcome);
+                return;
+            }
         }
+    }
+
+    pub fn make_halfturn(&mut self, c: Color) -> GameOutcome {
+        println!("{}", self.state);
+        let mv = match c {
+            Color::White => self.white.play_move(&self.state),
+            Color::Black => self.black.play_move(&self.state),
+            _ => panic!("Unexpected program flow: tried to play as empty color"),
+        };
+        println!("{}", mv);
+        self.state
+            .player_move(&mv)
+            .expect(&format!("Illegal move tried: {}", mv));
+        self.state.outcome()
     }
 }
