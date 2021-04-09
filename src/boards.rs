@@ -110,6 +110,12 @@ impl MailboxBoard {
         self.pieces[end] = self.pieces[start];
         self.pieces[start] = Piece::Empty;
     }
+
+    // Exchanges piece at position
+    pub fn exchange(&mut self, to: Piece, at: Position) {
+        debug_assert!(self.pieces[at] != Piece::Empty);
+        self.pieces[at] = to;
+    }
 }
 
 impl ops::Index<usize> for MailboxBoard {
@@ -209,12 +215,12 @@ impl BitBoard {
         self.0 & (0x8000000000000000 >> pos.get()) != 0
     }
 
-    /// Returns true if the bit at position is 1
+    /// Returns Bitboard where the bit at pos is set
     pub fn set_bit_at(self, pos: Position) -> BitBoard {
         (self.0 | (0x8000000000000000 >> pos.get())).into()
     }
 
-    /// Returns true if the bit at position is 1
+    /// Returns Bitboard where the bit at pos is unset
     pub fn unset_bit_at(self, pos: Position) -> BitBoard {
         (self.0 & !(0x8000000000000000 >> pos.get())).into()
     }

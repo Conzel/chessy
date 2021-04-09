@@ -75,7 +75,8 @@ pub enum MoveType {
     EnPassant,
     Castle(CastleSide),
     PawnTwostep,
-    Promotion(PieceType),
+    Promotion(Piece),
+    PromotionCapture(Piece, Piece),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

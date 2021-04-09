@@ -1,3 +1,4 @@
+use crate::Position;
 use std::fmt::{self, Display};
 
 // ---------------------------------------------
@@ -111,6 +112,13 @@ impl Piece {
             Bishop => "B",
             Empty => panic!("Empty Piece has no algebraic depiction"),
         }
+    }
+
+    /// Returns true if black pawn is in row 1, white pawn in row 8
+    pub fn is_promotion_row_pawn(&self, pos: Position) -> bool {
+        let p = pos.get();
+        self == &Piece::PawnWhite && p >= 0 && p <= 7
+            || self == &Piece::PawnBlack && p >= 56 && p <= 63
     }
 
     pub fn get_type(&self) -> PieceType {

@@ -304,14 +304,44 @@ impl GameState {
             // At least one valid move can be made for this piece
             for end_pos in Position::all_positions() {
                 if move_board.bit_set_at(end_pos.into()) {
-                    let movetype = if enemy_occ.bit_set_at(end_pos) {
+                    let movetype = 
+                        // Check capture
+                        if enemy_occ.bit_set_at(end_pos) {
                         let captured_piece = self.mailbox_repr[end_pos];
                         if captured_piece.get_type() == PieceType::King {
                             return None;
                         }
-                        MoveType::Capture(captured_piece)
+                        // Check promotion
+                        if piece.is_promotion_row_pawn(end_pos) {
+                            // TODO: promoteable to other pieces
+                            MoveType::PromotionCapture(
+                                captured_piece, 
+                                match self.current_player {
+                                    Color::White => Piece::QueenWhite,
+                                    Color::Black => Piece::QueenBlack,
+                                    _ => panic!("Current player is empty color"),
+                                }
+                            )
+                        }
+                        else {
+                            MoveType::Capture(captured_piece)
+                        }
                     } else {
-                        MoveType::Standard
+                        // Check promotion
+                        if piece.is_promotion_row_pawn(end_pos) {
+                            // TODO: promoteable to other pieces
+                            MoveType::Promotion(
+                            match self.current_player {
+                                Color::White => Piece::QueenWhite,
+                                Color::Black => Piece::QueenBlack,
+                                _ => panic!("Current player is empty color"),
+                            }
+                            )
+                        }
+                        else {
+                            // default case
+                            MoveType::Standard
+                        }
                     };
                     res.push(Move::new(start_pos, end_pos, piece, movetype));
                 }
@@ -355,8 +385,8 @@ impl GameState {
         self.move_piece_bitboard(m.piece, m.end, m.start);
     }
 
-    fn recalculate_current_occ(&mut self) {
-        match self.current_player {
+    fn recalculate_occ(&mut self, c: Color) {
+        match c {
             Color::White => self.recalculate_all_whites(),
             Color::Black => self.recalculate_all_blacks(),
             _ => panic!("Empty color at play"),
@@ -370,7 +400,7 @@ impl GameState {
         self.castling_info.update(m, self.turn_count);
 
         match m.kind {
-            MoveType::Standard => self.recalculate_current_occ(),
+            MoveType::Standard => (),
             MoveType::Capture(captured) => {
                 if captured == Piece::Empty {
                     println!("{}", m);
@@ -378,34 +408,59 @@ impl GameState {
                 debug_assert!(captured.get_color() != self.current_player);
                 self.capture_piece_bitboard(captured, m.end);
 
-                self.recalculate_all_whites();
-                self.recalculate_all_blacks();
+                self.recalculate_occ(self.current_player.opposite());
             }
             MoveType::Castle(kind) => {
-                // println!("Forward castle");
                 let rook_move = kind.associated_rook_move();
                 self.move_board_reprs_forward(&rook_move);
-                self.recalculate_current_occ();
+            }
+            MoveType::Promotion(to) => {
+                self.promote(m.piece, to, m.end);
+            }
+            MoveType::PromotionCapture(captured, to) => {
+                if captured == Piece::Empty {
+                    println!("{}", m);
+                }
+                debug_assert!(
+                    captured.get_color() != self.current_player,
+                    "{:?} captured by {}",
+                    captured,
+                    self.current_player
+                );
+                self.capture_piece_bitboard(captured, m.end);
+                self.promote(m.piece, to, m.end);
+                self.recalculate_occ(self.current_player.opposite());
             }
             _ => todo!(),
         }
+
+        self.recalculate_occ(self.current_player);
         self.advance_turn();
+    }
+
+    pub fn promote(&mut self, from: Piece, to: Piece, at: Position) {
+        let source = self.get_pieceboard(from);
+        *source = source.unset_bit_at(at);
+
+        let target = self.get_pieceboard(to);
+        *target = target.set_bit_at(at);
+
+        self.mailbox_repr.exchange(to, at);
     }
 
     pub fn undo_move(&mut self, m: &Move) {
         self.deadvance_turn();
         self.castling_info.unupdate(self.turn_count);
-        self.move_board_reprs_backward(m);
         match m.kind {
-            MoveType::Standard => self.recalculate_current_occ(),
+            MoveType::Standard => self.move_board_reprs_backward(m),
             MoveType::Capture(captured) => {
+                self.move_board_reprs_backward(m);
                 if captured == Piece::Empty {
                     println!("{}", m);
                 }
                 self.uncapture_piece_bitboard(captured, m.end);
 
-                self.recalculate_all_blacks();
-                self.recalculate_all_whites();
+                self.recalculate_occ(self.current_player.opposite());
                 self.mailbox_repr.add(m.end, captured).expect(
                     "Unexpected execution flow in undo move:
                 position already occupied in mailbox",
@@ -413,12 +468,34 @@ impl GameState {
             }
             MoveType::Castle(kind) => {
                 // println!("Backward castle");
+                self.move_board_reprs_backward(m);
                 let rook_move = kind.associated_rook_move();
                 self.move_board_reprs_backward(&rook_move);
-                self.recalculate_current_occ();
+            }
+            MoveType::Promotion(to) => {
+                self.mailbox_repr.make_move(m.end, m.start);
+                self.move_piece_bitboard(to, m.end, m.start);
+                self.promote(to, m.piece, m.start);
+            }
+            MoveType::PromotionCapture(captured, to) => {
+                self.mailbox_repr.make_move(m.end, m.start);
+                self.move_piece_bitboard(to, m.end, m.start);
+
+                if captured == Piece::Empty {
+                    println!("{}", m);
+                }
+                self.uncapture_piece_bitboard(captured, m.end);
+
+                self.mailbox_repr.add(m.end, captured).expect(
+                    "Unexpected execution flow in undo move:
+                position already occupied in mailbox",
+                );
+                self.promote(to, m.piece, m.start);
+                self.recalculate_occ(self.current_player.opposite());
             }
             _ => todo!(),
         };
+        self.recalculate_occ(self.current_player);
     }
 
     /// Updates the piece bit board corresponding to the given piece by moving the entry
@@ -886,6 +963,95 @@ mod tests {
 
         g.make_move(&castle_black);
         g.undo_move(&castle_black);
+        assert_eq!(g, prev_g);
+    }
+
+    #[test]
+    fn test_do_undo_promotion() {
+        let mut g = GameState::standard_setup();
+        let p = |s: &str| -> Position { s.parse().unwrap() };
+
+        g.player_move(&PlayerMove(p("a2"), p("a4"))).unwrap();
+        g.player_move(&PlayerMove(p("h7"), p("h5"))).unwrap();
+
+        g.player_move(&PlayerMove(p("a4"), p("a5"))).unwrap();
+        g.player_move(&PlayerMove(p("h5"), p("h4"))).unwrap();
+
+        g.player_move(&PlayerMove(p("a5"), p("a6"))).unwrap();
+        g.player_move(&PlayerMove(p("h4"), p("h3"))).unwrap();
+
+        g.player_move(&PlayerMove(p("a6"), p("b7"))).unwrap();
+        g.player_move(&PlayerMove(p("h3"), p("g2"))).unwrap();
+
+        let promo_cap_white = Move::new(
+            p("b7"),
+            p("a8"),
+            Piece::PawnWhite,
+            MoveType::PromotionCapture(Piece::RookBlack, Piece::QueenWhite),
+        );
+        let promo_cap_black = Move::new(
+            p("g2"),
+            p("h1"),
+            Piece::PawnBlack,
+            MoveType::PromotionCapture(Piece::RookWhite, Piece::QueenBlack),
+        );
+
+        let prev_g = g.clone();
+        g.make_move(&promo_cap_white);
+        g.undo_move(&promo_cap_white);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("b7"), p("a8"))).unwrap();
+        g.undo_move(&promo_cap_white);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("d2"), p("d3"))).unwrap();
+
+        let prev_g = g.clone();
+        g.make_move(&promo_cap_black);
+        g.undo_move(&promo_cap_black);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("g2"), p("h1"))).unwrap();
+        g.undo_move(&promo_cap_black);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("d7"), p("d6"))).unwrap();
+
+        g.player_move(&PlayerMove(p("g1"), p("f3"))).unwrap();
+        g.player_move(&PlayerMove(p("b8"), p("c6"))).unwrap();
+
+        let promo_white = Move::new(
+            p("b7"),
+            p("b8"),
+            Piece::PawnWhite,
+            MoveType::Promotion(Piece::QueenWhite),
+        );
+        let promo_black = Move::new(
+            p("g2"),
+            p("g1"),
+            Piece::PawnBlack,
+            MoveType::Promotion(Piece::QueenBlack),
+        );
+
+        let prev_g = g.clone();
+        g.make_move(&promo_white);
+        g.undo_move(&promo_white);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("b7"), p("b8"))).unwrap();
+        g.undo_move(&promo_white);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("d3"), p("d4"))).unwrap();
+
+        let prev_g = g.clone();
+        g.make_move(&promo_black);
+        g.undo_move(&promo_black);
+        assert_eq!(g, prev_g);
+
+        g.player_move(&PlayerMove(p("g2"), p("g1"))).unwrap();
+        g.undo_move(&promo_black);
         assert_eq!(g, prev_g);
     }
 }

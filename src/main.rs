@@ -43,8 +43,12 @@ use text_io::read;
 //   ✓ Move generator & validator
 //   ✓ Move heuristic
 //   ✓ Search strategy
-//   * Advanced Moves (castling, en passant, promotion)
+//   * Advanced Moves
+//     ✓ castling
+//     * en passant
+//     ✓ promotion
 //   * Move preordering
+//   * Lazy move generation
 //   * Quiescent search
 //   * Let the engine checkmate
 // * Include tests
