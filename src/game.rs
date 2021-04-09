@@ -35,6 +35,7 @@ impl<A1: Agent, A2: Agent> Game<A1, A2> {
                 .player_move(&white_mv)
                 .expect(&format!("Illegal move tried: {}", white_mv));
             println!("{}", self.state);
+
             let black_mv = self.black.play_move(&self.state);
             println!("{}", black_mv);
             self.state

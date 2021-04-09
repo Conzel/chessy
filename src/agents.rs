@@ -48,7 +48,7 @@ impl RandomAgent {
 
 impl Agent for RandomAgent {
     fn play_move(&self, state: &GameState) -> PlayerMove {
-        state.clone().play_random_turn().unwrap().into()
+        state.clone().get_random_turn().unwrap().into()
     }
 }
 

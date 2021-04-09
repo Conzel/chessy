@@ -41,14 +41,25 @@ use text_io::read;
 // MIDDLE:
 // * Create Chess Engine:
 //   ✓ Move generator & validator
-//   * Move heuristic
-//   * Search strategy
-//   * Advanced Moves (e.p., castling)
+//   ✓ Move heuristic
+//   ✓ Search strategy
+//   * Advanced Moves (castling, en passant, promotion)
+//   * Move preordering
+//   * Quiescent search
+//   * Let the engine checkmate
 // * Include tests
+// * More fine grained heuristics
+// * End game positionals
+// * Improve documentation
+//
+// EXTRA COOL STUFF:
+// * Undo moves in play with humans
+// * Protocols of games with replays
+// * Logging for debugging
 //
 // END:
 // * Abstract engine into its own form
-// * Write Algebraic Notation Parser
+// ✓ Write Algebraic Notation Parser
 // * Interfaces
 //   * Simple CLI
 //   * Simple GUI
@@ -63,8 +74,10 @@ use text_io::read;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = Game::new(
-        AlphaBetaAgent::new(5, AlphaBetaMaterialPos(Color::White)),
-        HumanAgent::new(),
+        AlphaBetaAgent::new(1, AlphaBetaMaterialPos(Color::White)),
+        AlphaBetaAgent::new(5, AlphaBetaMaterialPos(Color::Black)),
+        // HumanAgent::new(),
+        // HumanAgent::new(),
     );
     g.play();
     Ok(())

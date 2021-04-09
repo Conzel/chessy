@@ -1,9 +1,3 @@
-// GOALS:
-// * Create Chess Engine:
-//   * Move generator & validator
-//   * Move heuristic
-//   * Search strategy
-// * Include tests
 use crate::attacks::*;
 use crate::boards::*;
 use crate::chess_errors::*;
@@ -18,6 +12,8 @@ use std::fmt::{self, Debug, Display};
 // BitBoardGame
 // ------------------------------------
 
+type Turn = u16;
+
 /// A Game State is an object that represents the current GameState.
 /// Implements basic operations (executing one move forward, backwards, legal move generation)
 /// and information about game statistics.
@@ -30,8 +26,9 @@ pub struct GameState {
     all_whites: BitBoard,
     all_blacks: BitBoard,
     mailbox_repr: MailboxBoard,
-    turn_count: u16,
+    turn_count: Turn,
     current_player: Color,
+    castling_info: CastlingInformation,
 }
 
 // Public Interface
@@ -41,6 +38,7 @@ impl GameState {
         let m = self
             .find_player_move(pm)
             .ok_or(ChessError::from("Illegal move"))?;
+
         self.make_move(&m);
         Ok(())
     }
@@ -96,6 +94,7 @@ impl GameState {
             mailbox_repr: mailbox_repr,
             turn_count: 0,
             current_player: Color::White,
+            castling_info: CastlingInformation::at_start(),
         }
     }
 }
@@ -216,6 +215,7 @@ impl Debug for GameState {
             "Whites: {:#?}\nBlacks: {:#?}\n",
             self.all_whites, self.all_blacks
         )?;
+        write!(f, "\nCastling Info: {:#?}\n", self.castling_info)?;
         write!(f, "{}", self.mailbox_repr)
     }
 }
@@ -237,7 +237,10 @@ impl GameState {
             RookBlack => &mut self.black_pieces.rooks,
             QueenBlack => &mut self.black_pieces.queens,
             KingBlack => &mut self.black_pieces.kings,
-            _ => panic!("Tried to query game for empty piece board"),
+            _ => panic!(
+                "Tried to query game for empty piece board at state: {:?}",
+                self
+            ),
         }
     }
 }
@@ -255,8 +258,34 @@ impl GameState {
     pub fn gen_moves(&self) -> Option<Vec<Move>> {
         let mut res = Vec::new();
 
+        // Castling checks
+        let relevant_castles = self.castling_info.relevant_castles(self.current_player);
+        let all_occupancies = self.all_whites | self.all_blacks;
+
+        // Shortcut castling if the castle sides are blocked
+        // Could also save the blocking information as a further optimization
+        let mut castling_possible = false;
+        if !relevant_castles.is_empty() {
+            for kind in self.castling_info.relevant_castles(self.current_player) {
+                if kind.castling_possible(BitBoard::empty(), all_occupancies) {
+                    castling_possible = true;
+                }
+            }
+        }
+
+        let mut total_attacks = BitBoard::empty();
+        let enemy_color = self.current_player.opposite();
+
         for (start_pos, piece) in self.mailbox_repr.into_iter() {
-            if piece == Piece::Empty || piece.get_color() != self.current_player {
+            if piece == Piece::Empty {
+                continue;
+            }
+
+            if piece.get_color() == enemy_color {
+                if castling_possible {
+                    // Oof ouch this is expensive, and all that only for castling :(
+                    total_attacks = total_attacks | self.piece_move_board(start_pos, piece);
+                }
                 continue;
             }
 
@@ -287,8 +316,18 @@ impl GameState {
                     res.push(Move::new(start_pos, end_pos, piece, movetype));
                 }
             }
-            // TODO: Check for Castling and E.P.
         }
+
+        if castling_possible {
+            for kind in self.castling_info.relevant_castles(self.current_player) {
+                if kind.castling_possible(total_attacks, all_occupancies) {
+                    res.push(kind.associated_castle_move())
+                }
+            }
+        }
+
+        // TODO: Check E.P.
+        // TODO: Move preordering
         Some(res)
     }
 
@@ -302,25 +341,51 @@ impl GameState {
         }
     }
 
-    // Makes a move on the board.
-    pub fn make_move(&mut self, m: &Move) {
+    // Purely does the job of updating directly involved boards
+    fn move_board_reprs_forward(&mut self, m: &Move) {
         // Making the move
         self.move_piece_bitboard(m.piece, m.start, m.end);
         self.mailbox_repr.make_move(m.start, m.end);
+    }
 
+    // Purely does the job of updating directly involved boards
+    fn move_board_reprs_backward(&mut self, m: &Move) {
+        // Making the move
+        self.mailbox_repr.make_move(m.end, m.start);
+        self.move_piece_bitboard(m.piece, m.end, m.start);
+    }
+
+    fn recalculate_current_occ(&mut self) {
+        match self.current_player {
+            Color::White => self.recalculate_all_whites(),
+            Color::Black => self.recalculate_all_blacks(),
+            _ => panic!("Empty color at play"),
+        }
+    }
+
+    // Makes a move on the board.
+    pub fn make_move(&mut self, m: &Move) {
         // Updating our representation
+        self.move_board_reprs_forward(m);
+        self.castling_info.update(m, self.turn_count);
+
         match m.kind {
-            MoveType::Standard => match self.current_player {
-                Color::White => self.recalculate_all_whites(),
-                Color::Black => self.recalculate_all_blacks(),
-                _ => panic!("Empty color at play"),
-            },
+            MoveType::Standard => self.recalculate_current_occ(),
             MoveType::Capture(captured) => {
+                if captured == Piece::Empty {
+                    println!("{}", m);
+                }
                 debug_assert!(captured.get_color() != self.current_player);
                 self.capture_piece_bitboard(captured, m.end);
 
                 self.recalculate_all_whites();
                 self.recalculate_all_blacks();
+            }
+            MoveType::Castle(kind) => {
+                // println!("Forward castle");
+                let rook_move = kind.associated_rook_move();
+                self.move_board_reprs_forward(&rook_move);
+                self.recalculate_current_occ();
             }
             _ => todo!(),
         }
@@ -329,15 +394,14 @@ impl GameState {
 
     pub fn undo_move(&mut self, m: &Move) {
         self.deadvance_turn();
-        self.move_piece_bitboard(m.piece, m.end, m.start);
-        self.mailbox_repr.make_move(m.end, m.start);
+        self.castling_info.unupdate(self.turn_count);
+        self.move_board_reprs_backward(m);
         match m.kind {
-            MoveType::Standard => match self.current_player {
-                Color::White => self.recalculate_all_whites(),
-                Color::Black => self.recalculate_all_blacks(),
-                _ => panic!("Empty color at play"),
-            },
+            MoveType::Standard => self.recalculate_current_occ(),
             MoveType::Capture(captured) => {
+                if captured == Piece::Empty {
+                    println!("{}", m);
+                }
                 self.uncapture_piece_bitboard(captured, m.end);
 
                 self.recalculate_all_blacks();
@@ -346,6 +410,12 @@ impl GameState {
                     "Unexpected execution flow in undo move:
                 position already occupied in mailbox",
                 );
+            }
+            MoveType::Castle(kind) => {
+                // println!("Backward castle");
+                let rook_move = kind.associated_rook_move();
+                self.move_board_reprs_backward(&rook_move);
+                self.recalculate_current_occ();
             }
             _ => todo!(),
         };
@@ -468,17 +538,139 @@ impl GameState {
         None
     }
 
-    pub fn play_random_turn(&mut self) -> ChessResult<Move> {
+    pub fn get_random_turn(&mut self) -> ChessResult<Move> {
         use rand::seq::SliceRandom;
         let rng = &mut rand::thread_rng();
         let moves = &self
             .gen_moves()
             .ok_or(ChessError::from("Previous move was illegal."))?;
-        let mv = moves
-            .choose(rng)
-            .ok_or(ChessError::from("No playable moves left."))?;
-        self.make_move(mv);
+
+        let mut n = 500;
+        let mut mv;
+        loop {
+            mv = moves
+                .choose(rng)
+                .ok_or(ChessError::from("No playable moves left."))?;
+            if n == 0 || self.find_player_move(&mv.into()).is_some() {
+                break;
+            }
+            n = n - 1;
+        }
         Ok(mv.clone())
+    }
+}
+
+// Shows which castling relevant pieces have been moved already
+// Goes from rooks a8 h8 a1 h1 to kings e8 e1
+#[derive(Debug, Clone, PartialEq)]
+struct CastlingInformation {
+    a8_rook_first_move: Turn,
+    h8_rook_first_move: Turn,
+    e8_king_first_move: Turn,
+    a1_rook_first_move: Turn,
+    h1_rook_first_move: Turn,
+    e1_king_first_move: Turn,
+}
+
+impl CastlingInformation {
+    pub fn at_start() -> CastlingInformation {
+        CastlingInformation {
+            a8_rook_first_move: 0,
+            h8_rook_first_move: 0,
+            e8_king_first_move: 0,
+            a1_rook_first_move: 0,
+            h1_rook_first_move: 0,
+            e1_king_first_move: 0,
+        }
+    }
+
+    pub fn relevant_castles(&self, c: Color) -> Vec<CastleSide> {
+        let mut res = Vec::new();
+        if c == Color::Black {
+            if self.a8_rook_first_move == 0 && self.e8_king_first_move == 0 {
+                res.push(CastleSide::QueensideBlack);
+            }
+            if self.h8_rook_first_move == 0 && self.e8_king_first_move == 0 {
+                res.push(CastleSide::KingsideBlack);
+            }
+        } else {
+            debug_assert!(c == Color::White);
+            if self.a1_rook_first_move == 0 && self.e1_king_first_move == 0 {
+                res.push(CastleSide::QueensideWhite);
+            }
+            if self.h1_rook_first_move == 0 && self.e1_king_first_move == 0 {
+                res.push(CastleSide::KingsideWhite);
+            }
+        }
+        res
+    }
+
+    fn update_piece_action(&mut self, piece: Piece, pos: Position, turn: Turn) {
+        let piece_type = piece.get_type();
+        if piece_type == PieceType::King {
+            match pos.get() {
+                4 => {
+                    if self.e8_king_first_move == 0 {
+                        self.e8_king_first_move = turn;
+                    }
+                }
+                60 => {
+                    if self.e1_king_first_move == 0 {
+                        self.e1_king_first_move = turn;
+                    }
+                }
+                _ => (),
+            }
+        } else if piece_type == PieceType::Rook {
+            match pos.get() {
+                0 => {
+                    if self.a8_rook_first_move == 0 {
+                        self.a8_rook_first_move = turn;
+                    }
+                }
+                7 => {
+                    if self.h8_rook_first_move == 0 {
+                        self.h8_rook_first_move = turn;
+                    }
+                }
+                56 => {
+                    if self.a1_rook_first_move == 0 {
+                        self.a1_rook_first_move = turn;
+                    }
+                }
+                63 => {
+                    if self.h1_rook_first_move == 0 {
+                        self.h1_rook_first_move = turn;
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
+
+    pub fn update(&mut self, mv: &Move, turn: Turn) {
+        // Check for captures
+        if let MoveType::Capture(p) = mv.kind {
+            self.update_piece_action(p, mv.end, turn);
+        }
+        // Check for moving
+        self.update_piece_action(mv.piece, mv.start, turn);
+    }
+
+    pub fn unupdate(&mut self, turn: Turn) {
+        if self.h1_rook_first_move == turn {
+            self.h1_rook_first_move = 0;
+        } else if self.h8_rook_first_move == turn {
+            self.h8_rook_first_move = 0;
+        } else if self.a1_rook_first_move == turn {
+            self.a1_rook_first_move = 0;
+        } else if self.a8_rook_first_move == turn {
+            self.a8_rook_first_move = 0;
+        } else if self.e1_king_first_move == turn {
+            self.e1_king_first_move = 0;
+        } else if self.e8_king_first_move == turn {
+            self.e8_king_first_move = 0;
+        }
     }
 }
 
@@ -660,11 +852,40 @@ mod tests {
 
         for _ in 0..50 {
             let prev_g = g.clone();
-            let mv = g.play_random_turn().unwrap();
+            let mv = g.get_random_turn().unwrap();
+            g.make_move(&mv);
             g.undo_move(&mv);
-            assert_eq!(g, prev_g, "\nCouldn't undo move \n{:?}\n", mv);
+            assert_eq!(g, prev_g, "\nCouldn't undo move \n{}\n", mv);
 
-            g.play_random_turn().unwrap();
+            g.get_random_turn().unwrap();
         }
+    }
+
+    #[test]
+    fn test_do_undo_castle() {
+        let mut g = GameState::standard_setup();
+        let p = |s: &str| -> Position { s.parse().unwrap() };
+
+        g.player_move(&PlayerMove(p("e2"), p("e3"))).unwrap();
+        g.player_move(&PlayerMove(p("e7"), p("e6"))).unwrap();
+
+        g.player_move(&PlayerMove(p("g1"), p("f3"))).unwrap();
+        g.player_move(&PlayerMove(p("g8"), p("f6"))).unwrap();
+
+        g.player_move(&PlayerMove(p("f1"), p("b5"))).unwrap();
+        g.player_move(&PlayerMove(p("f8"), p("b4"))).unwrap();
+
+        let prev_g = g.clone();
+
+        let castle_white = CastleSide::KingsideWhite.associated_castle_move();
+        let castle_black = CastleSide::KingsideBlack.associated_castle_move();
+
+        g.make_move(&castle_white);
+        g.undo_move(&castle_white);
+        assert_eq!(g, prev_g);
+
+        g.make_move(&castle_black);
+        g.undo_move(&castle_black);
+        assert_eq!(g, prev_g);
     }
 }
