@@ -3,8 +3,9 @@ use crate::engine::*;
 /// Differing kinds of agents that can play the game
 use crate::game::Agent;
 use crate::game_state::GameState;
-use crate::moves::{Move, PlayerMove};
+use crate::moves::*;
 use crate::pieces::Color;
+use crate::pieces::PieceType;
 use crate::Position;
 use std::io::{stdout, Write};
 use text_io::try_read;
@@ -180,6 +181,10 @@ impl AlphaBetaSearch for AlphaBetaMaterial {
         let val = g.material_value();
         return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
     }
+
+    fn move_score(_: &Move) -> i32 {
+        0
+    }
 }
 
 pub struct AlphaBetaMaterialPos(pub Color);
@@ -187,6 +192,44 @@ impl AlphaBetaSearch for AlphaBetaMaterialPos {
     fn score(&self, g: &GameState) -> i32 {
         let val = g.material_value() + g.positional_value();
         return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
+    }
+
+    fn move_score(_: &Move) -> i32 {
+        0
+    }
+}
+
+pub struct AlphaBetaMovePreordering(pub Color);
+impl AlphaBetaSearch for AlphaBetaMovePreordering {
+    fn score(&self, g: &GameState) -> i32 {
+        let val = g.material_value() + g.positional_value();
+        return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
+    }
+
+    fn move_score(m: &Move) -> i32 {
+        use MoveType::*;
+
+        match m.kind {
+            Castle(_) => 100,
+            Capture(captured) => piece_material_value(captured.get_type()),
+            Promotion(_) => 900,
+            PromotionCapture(_, captured) => piece_material_value(captured.get_type()) + 900,
+            _ => 0,
+        }
+    }
+}
+
+fn piece_material_value(p: PieceType) -> i32 {
+    use PieceType::*;
+
+    match p {
+        Pawn => 100,
+        Queen => 900,
+        King => 2000,
+        Rook => 500,
+        Bishop => 300,
+        Knight => 300,
+        _ => 0,
     }
 }
 

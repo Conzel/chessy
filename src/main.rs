@@ -78,10 +78,8 @@ use text_io::read;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = Game::new(
-        // AlphaBetaAgent::new(1, AlphaBetaMaterialPos(Color::White)),
-        // AlphaBetaAgent::new(5, AlphaBetaMaterialPos(Color::Black)),
-        HumanAgent::new(),
-        HumanAgent::new(),
+        AlphaBetaAgent::new(6, AlphaBetaMovePreordering(Color::White)),
+        AlphaBetaAgent::new(2, AlphaBetaMovePreordering(Color::Black)),
     );
     g.play();
     Ok(())
