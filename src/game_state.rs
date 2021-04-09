@@ -345,9 +345,8 @@ impl GameState {
             // At least one valid move can be made for this piece
             for end_pos in Position::all_positions() {
                 if move_board.bit_set_at(end_pos.into()) {
-                    let movetype = 
-                        // Check capture
-                        if enemy_occ.bit_set_at(end_pos) {
+                    //
+                    let movetype = if enemy_occ.bit_set_at(end_pos) {
                         let captured_piece = self.mailbox_repr[end_pos];
                         if captured_piece.get_type() == PieceType::King {
                             return None;
@@ -356,30 +355,26 @@ impl GameState {
                         if piece.is_promotion_row_pawn(end_pos) {
                             // TODO: promoteable to other pieces
                             MoveType::PromotionCapture(
-                                captured_piece, 
+                                captured_piece,
                                 match self.current_player {
                                     Color::White => Piece::QueenWhite,
                                     Color::Black => Piece::QueenBlack,
                                     _ => panic!("Current player is empty color"),
-                                }
+                                },
                             )
-                        }
-                        else {
+                        } else {
                             MoveType::Capture(captured_piece)
                         }
                     } else {
                         // Check promotion
                         if piece.is_promotion_row_pawn(end_pos) {
                             // TODO: promoteable to other pieces
-                            MoveType::Promotion(
-                            match self.current_player {
+                            MoveType::Promotion(match self.current_player {
                                 Color::White => Piece::QueenWhite,
                                 Color::Black => Piece::QueenBlack,
                                 _ => panic!("Current player is empty color"),
-                            }
-                            )
-                        }
-                        else {
+                            })
+                        } else {
                             // default case
                             MoveType::Standard
                         }
