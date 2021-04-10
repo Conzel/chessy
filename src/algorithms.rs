@@ -4,7 +4,14 @@ use crate::moves::{Move, MoveType};
 use std::cmp::{max, min};
 
 const QUIESCENCE_SAFETY_BOUND: i32 = 200;
-const ABSOLUTE_MAX_DEPTH: u16 = 20;
+const QUIESCENCE_MAX_DEPTH: u16 = 3;
+
+// If we used the true min, then -1 * i32::MIN = i32::MIN, due to overflow
+const ALMOST_MIN: i32 = i32::MIN + 1;
+const ALMOST_MAX: i32 = i32::MAX - 1;
+
+static mut num_nodes_visited: u64 = 0;
+static mut num_quiescent_nodes: u64 = 0;
 
 pub trait AlphaBetaSearch {
     fn score(&self, g: &GameState) -> i32;
@@ -19,10 +26,14 @@ pub trait AlphaBetaSearch {
     }
 
     fn alphabeta(&self, engine: &StandardEngine, n: u16) -> Option<Move> {
-        let mut best_val = i32::MIN;
+        unsafe {
+            num_nodes_visited = 0;
+            num_quiescent_nodes = 0;
+        }
+        let mut best_val = ALMOST_MIN;
         let mut best_move = None;
-        let mut alpha_ = i32::MIN;
-        let beta_ = i32::MAX;
+        let mut alpha_ = ALMOST_MIN;
+        let beta_ = ALMOST_MAX;
 
         let mut engine_copy = engine.clone();
 
@@ -34,7 +45,7 @@ pub trait AlphaBetaSearch {
         for mv in moves {
             engine_copy.next(mv.clone());
 
-            let move_val = self.alphabeta_helper(&mut engine_copy, n - 1, alpha_, beta_, false);
+            let move_val = -self.alphabeta_helper(&mut engine_copy, n - 1, -beta_, -alpha_, -1);
 
             if move_val > best_val {
                 best_val = move_val;
@@ -47,6 +58,13 @@ pub trait AlphaBetaSearch {
                 break;
             }
         }
+
+        unsafe {
+            println!(
+                "Visited: {} quiescent: {}",
+                num_nodes_visited, num_quiescent_nodes
+            );
+        }
         best_move
     }
     // Implementation of quiescence search
@@ -56,10 +74,14 @@ pub trait AlphaBetaSearch {
         engine: &mut StandardEngine,
         alpha: i32,
         beta: i32,
-        maximizing: bool,
+        sign: i32,
         n: u16,
     ) -> i32 {
-        let stand_pat = self.score(engine.get_state());
+        unsafe {
+            num_quiescent_nodes += 1;
+        }
+
+        let stand_pat = sign * self.score(engine.get_state());
         if stand_pat >= beta {
             return beta;
         }
@@ -74,13 +96,13 @@ pub trait AlphaBetaSearch {
         // Check if previous move was illegal
         // Could also return an Option
         if (&moves).is_none() {
-            return if maximizing { i32::MAX } else { i32::MIN };
+            return ALMOST_MAX;
         }
 
         let mut moves_reordered = moves.unwrap();
 
         // Check if no moves are left after this point
-        if n == ABSOLUTE_MAX_DEPTH || moves_reordered.is_empty() {
+        if n == 0 || moves_reordered.is_empty() {
             return stand_pat;
         }
 
@@ -90,15 +112,9 @@ pub trait AlphaBetaSearch {
             match m.kind {
                 MoveType::Capture(_) | MoveType::PromotionCapture(_, _) => {
                     let score;
-                    if maximizing {
-                        engine.next(m);
-                        score = self.quiesce(engine, alpha_, beta, !maximizing, n - 1);
-                        engine.undo().unwrap();
-                    } else {
-                        engine.next(m);
-                        score = self.quiesce(engine, alpha_, beta, !maximizing, n - 1);
-                        engine.undo().unwrap();
-                    }
+                    engine.next(m);
+                    score = -self.quiesce(engine, -beta, -alpha_, -sign, n - 1);
+                    engine.undo().unwrap();
                     if score > alpha_ {
                         alpha_ = score;
                     }
@@ -119,63 +135,51 @@ pub trait AlphaBetaSearch {
         n: u16,
         alpha: i32,
         beta: i32,
-        maximizing: bool,
+        sign: i32,
     ) -> i32 {
+        unsafe {
+            num_nodes_visited += 1;
+        }
         let moves = engine.gen_moves();
 
         // Check if previous move was illegal
         // Could also return an Option
         if (&moves).is_none() {
-            return if maximizing { i32::MAX } else { i32::MIN };
+            return ALMOST_MAX;
         }
 
         let mut moves_reordered = moves.unwrap();
 
         // Check if no moves are left after this point
-        if moves_reordered.is_empty() {
-            return self.score(engine.get_state());
-        }
+        // if moves_reordered.is_empty() {
+        //     return sign * self.score(engine.get_state());
+        // }
 
         if n == 0 {
-            return self.quiesce(engine, alpha, beta, maximizing, ABSOLUTE_MAX_DEPTH);
+            // return sign * self.score(engine.get_state());
+            return self.quiesce(engine, alpha, beta, sign, QUIESCENCE_MAX_DEPTH);
         }
 
         moves_reordered.sort_unstable_by(Self::move_cmp);
 
         // Main part of the algorithm
+        // Negamax Implemenation
+        // See <https://en.wikipedia.org/wiki/Negamax>
+
         let mut alpha_ = alpha;
-        let mut beta_ = beta;
-        let mut val;
-        if maximizing {
-            val = i32::MIN;
+        let mut val = ALMOST_MIN;
 
-            // TODO: Use owned iters?
-            for mv in moves_reordered {
-                engine.next(mv.clone());
-                val = max(
-                    val,
-                    self.alphabeta_helper(engine, n - 1, alpha_, beta_, false),
-                );
-                engine.undo().unwrap();
-                alpha_ = max(alpha_, val);
-                if alpha_ >= beta_ {
-                    break;
-                }
-            }
-        } else {
-            val = i32::MAX;
-
-            for mv in moves_reordered {
-                engine.next(mv.clone());
-                val = min(
-                    val,
-                    self.alphabeta_helper(engine, n - 1, alpha_, beta_, true),
-                );
-                engine.undo().unwrap();
-                beta_ = min(beta_, val);
-                if alpha_ >= beta_ {
-                    break;
-                }
+        // TODO: Use owned iters?
+        for mv in moves_reordered {
+            engine.next(mv.clone());
+            val = max(
+                val,
+                -self.alphabeta_helper(engine, n - 1, -beta, -alpha_, -sign),
+            );
+            engine.undo().unwrap();
+            alpha_ = max(alpha_, val);
+            if alpha_ >= beta {
+                break;
             }
         }
         return val;

@@ -211,7 +211,9 @@ impl AlphaBetaSearch for AlphaBetaMovePreordering {
 
         match m.kind {
             Castle(_) => 100,
-            Capture(captured) => piece_material_value(captured.get_type()),
+            Capture(captured) => {
+                piece_material_value(captured.get_type()) - piece_material_value(m.piece.get_type())
+            }
             Promotion(_) => 900,
             PromotionCapture(_, captured) => piece_material_value(captured.get_type()) + 900,
             _ => 0,

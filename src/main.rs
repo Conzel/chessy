@@ -47,10 +47,11 @@ use text_io::read;
 //     ✓ castling
 //     * en passant
 //     ✓ promotion
-//   * Move preordering
+//   ✓ Move preordering
 //   * Lazy move generation
-//   * Quiescent search
-//   * Let the engine checkmate
+//   ✓ Quiescent search
+//   ✓ Let the engine checkmate
+//   * Transposition table
 // * Include tests
 // * More fine grained heuristics
 // * End game positionals
