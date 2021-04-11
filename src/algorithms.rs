@@ -4,7 +4,7 @@ use crate::moves::{Move, MoveType};
 use std::cmp::{max, min};
 
 const QUIESCENCE_SAFETY_BOUND: i32 = 200;
-const QUIESCENCE_MAX_DEPTH: u16 = 3;
+const QUIESCENCE_MAX_DEPTH: u16 = 10;
 
 // If we used the true min, then -1 * i32::MIN = i32::MIN, due to overflow
 const ALMOST_MIN: i32 = i32::MIN + 1;
@@ -110,7 +110,9 @@ pub trait AlphaBetaSearch {
 
         for m in moves_reordered {
             match m.kind {
-                MoveType::Capture(_) | MoveType::PromotionCapture(_, _) => {
+                MoveType::Capture(_)
+                | MoveType::PromotionCapture(_, _)
+                | MoveType::Promotion(_) => {
                     let score;
                     engine.next(m);
                     score = -self.quiesce(engine, -beta, -alpha_, -sign, n - 1);
