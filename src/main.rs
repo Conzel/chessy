@@ -16,6 +16,7 @@ mod moves;
 mod pieces;
 mod positional_tables;
 mod positions;
+mod transposition_table;
 mod utils;
 
 use agents::*;
@@ -52,6 +53,8 @@ use text_io::read;
 //   ✓ Quiescent search
 //   ✓ Let the engine checkmate
 //   * Transposition table
+//   * Time control (via iterative deepening)
+// * Refactor code: Game state (ugly details) vs engine (Clean interface)
 // * Include tests
 // * More fine grained heuristics
 // * End game positionals
@@ -79,8 +82,8 @@ use text_io::read;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut g = Game::new(
-        HumanAgent::new(),
-        AlphaBetaAgent::new(5, AlphaBetaMovePreordering(Color::Black)),
+        AlphaBetaAgent::new(5, MatPosPreorderHeuristic(Color::White)),
+        AlphaBetaAgent::new(5, MatPosPreorderHeuristic(Color::Black)),
     );
     g.play();
     Ok(())

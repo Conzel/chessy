@@ -1,6 +1,7 @@
 use crate::algorithms::AlphaBetaSearch;
-use crate::engine::*;
 /// Differing kinds of agents that can play the game
+use crate::algorithms::Heuristics;
+use crate::engine::*;
 use crate::game::Agent;
 use crate::game_state::GameState;
 use crate::moves::*;
@@ -19,7 +20,7 @@ impl HumanAgent {
 }
 
 impl Agent for HumanAgent {
-    fn play_move(&self, g: &GameState) -> PlayerMove {
+    fn play_move(&mut self, g: &GameState) -> PlayerMove {
         loop {
             println!("Your turn: ");
             print!("From: ");
@@ -48,7 +49,7 @@ impl RandomAgent {
 }
 
 impl Agent for RandomAgent {
-    fn play_move(&self, state: &GameState) -> PlayerMove {
+    fn play_move(&mut self, state: &GameState) -> PlayerMove {
         state.clone().get_random_turn().unwrap().into()
     }
 }
@@ -62,7 +63,7 @@ impl GreedyMaterialAgent {
 }
 
 impl Agent for GreedyMaterialAgent {
-    fn play_move(&self, state: &GameState) -> PlayerMove {
+    fn play_move(&mut self, state: &GameState) -> PlayerMove {
         use rand::seq::SliceRandom;
 
         let mut best_move = None;
@@ -105,7 +106,7 @@ impl<A: Agent> SlowAgent<A> {
 }
 
 impl<A: Agent> Agent for SlowAgent<A> {
-    fn play_move(&self, state: &GameState) -> PlayerMove {
+    fn play_move(&mut self, state: &GameState) -> PlayerMove {
         std::thread::sleep(std::time::Duration::from_millis(self.response_time_millis));
         self.inner.play_move(state)
     }
@@ -152,7 +153,7 @@ impl<H: Fn(&GameState) -> i16> LookaheadHeuristicAgent<H> {
 }
 
 impl<H: Fn(&GameState) -> i16> Agent for LookaheadHeuristicAgent<H> {
-    fn play_move(&self, state: &GameState) -> PlayerMove {
+    fn play_move(&mut self, state: &GameState) -> PlayerMove {
         let start_state = state.clone();
         let mut engine = StandardEngine::new(start_state);
         let (moves, _) = self.move_recursive(&mut engine, self.lookahead);
@@ -160,23 +161,23 @@ impl<H: Fn(&GameState) -> i16> Agent for LookaheadHeuristicAgent<H> {
     }
 }
 
-pub struct AlphaBetaAgent<AB: AlphaBetaSearch> {
+pub struct AlphaBetaAgent<H: Heuristics> {
     depth: u8,
-    ab_searcher: AB,
+    alphabeta: AlphaBetaSearch<H>,
 }
 
-impl<AB: AlphaBetaSearch> AlphaBetaAgent<AB> {
-    pub fn new(depth: u8, ab_searcher: AB) -> Self {
+impl<H: Heuristics> AlphaBetaAgent<H> {
+    pub fn new(depth: u8, heuristic: H) -> Self {
         AlphaBetaAgent {
             depth: depth,
-            ab_searcher: ab_searcher,
+            alphabeta: AlphaBetaSearch::new(heuristic),
         }
     }
 }
 
-pub struct AlphaBetaMaterial(pub Color);
+pub struct PureMaterialHeuristic(pub Color);
 
-impl AlphaBetaSearch for AlphaBetaMaterial {
+impl Heuristics for PureMaterialHeuristic {
     fn score(&self, g: &GameState) -> i32 {
         let val = g.material_value();
         return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
@@ -187,8 +188,8 @@ impl AlphaBetaSearch for AlphaBetaMaterial {
     }
 }
 
-pub struct AlphaBetaMaterialPos(pub Color);
-impl AlphaBetaSearch for AlphaBetaMaterialPos {
+pub struct MaterialAndPositionalHeuristic(pub Color);
+impl Heuristics for MaterialAndPositionalHeuristic {
     fn score(&self, g: &GameState) -> i32 {
         let val = g.material_value() + g.positional_value();
         return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
@@ -199,8 +200,8 @@ impl AlphaBetaSearch for AlphaBetaMaterialPos {
     }
 }
 
-pub struct AlphaBetaMovePreordering(pub Color);
-impl AlphaBetaSearch for AlphaBetaMovePreordering {
+pub struct MatPosPreorderHeuristic(pub Color);
+impl Heuristics for MatPosPreorderHeuristic {
     fn score(&self, g: &GameState) -> i32 {
         let val = g.material_value() + g.positional_value();
         return val.value(self.0) as i32 - val.value(self.0.opposite()) as i32;
@@ -235,11 +236,11 @@ fn piece_material_value(p: PieceType) -> i32 {
     }
 }
 
-impl<AB: AlphaBetaSearch> Agent for AlphaBetaAgent<AB> {
-    fn play_move(&self, state: &GameState) -> PlayerMove {
+impl<H: Heuristics> Agent for AlphaBetaAgent<H> {
+    fn play_move(&mut self, state: &GameState) -> PlayerMove {
         let engine = StandardEngine::new(state.clone());
-        self.ab_searcher
-            .alphabeta(&engine, self.depth.into())
+        self.alphabeta
+            .search(&engine, self.depth.into())
             .unwrap()
             .into()
     }

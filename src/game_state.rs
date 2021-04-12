@@ -138,6 +138,14 @@ impl GameState {
             }
         }
     }
+
+    pub fn mailbox(&self) -> &MailboxBoard {
+        &self.mailbox_repr
+    }
+
+    pub fn castling_bitflag(&self) -> u8 {
+        self.castling_info.castling_bitflag()
+    }
 }
 
 /// Valuation result of a board state. Contains one value for white
@@ -726,6 +734,24 @@ impl CastlingInformation {
             if self.h1_rook_first_move == 0 && self.e1_king_first_move == 0 {
                 res.push(CastleSide::KingsideWhite);
             }
+        }
+        res
+    }
+
+    // TODO: Could update this on every move directly
+    pub fn castling_bitflag(&self) -> u8 {
+        let mut res = 0;
+        if self.a8_rook_first_move == 0 && self.e8_king_first_move == 0 {
+            res = res ^ 0b1000;
+        }
+        if self.h8_rook_first_move == 0 && self.e8_king_first_move == 0 {
+            res = res ^ 0b0100;
+        }
+        if self.a1_rook_first_move == 0 && self.e1_king_first_move == 0 {
+            res = res ^ 0b0010;
+        }
+        if self.h1_rook_first_move == 0 && self.e1_king_first_move == 0 {
+            res = res ^ 0b0001;
         }
         res
     }

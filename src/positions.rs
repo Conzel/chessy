@@ -155,7 +155,7 @@ impl Position {
         PositionIterator(0)
     }
 
-    pub const fn const_index(self) -> usize {
+    pub const fn as_index(self) -> usize {
         self.0 as usize
     }
 }

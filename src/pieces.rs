@@ -7,19 +7,19 @@ use std::fmt::{self, Display};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Piece {
-    PawnWhite,
-    KnightWhite,
-    BishopWhite,
-    RookWhite,
-    QueenWhite,
-    KingWhite,
-    PawnBlack,
-    KnightBlack,
-    BishopBlack,
-    RookBlack,
-    QueenBlack,
-    KingBlack,
-    Empty,
+    PawnWhite = 1,
+    KnightWhite = 2,
+    BishopWhite = 3,
+    RookWhite = 4,
+    QueenWhite = 5,
+    KingWhite = 6,
+    PawnBlack = 7,
+    KnightBlack = 8,
+    BishopBlack = 9,
+    RookBlack = 10,
+    QueenBlack = 11,
+    KingBlack = 12,
+    Empty = 13,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -112,6 +112,10 @@ impl Piece {
             Bishop => "B",
             Empty => panic!("Empty Piece has no algebraic depiction"),
         }
+    }
+
+    pub const fn as_index(&self) -> usize {
+        (*self) as usize
     }
 
     /// Returns true if black pawn is in row 1, white pawn in row 8

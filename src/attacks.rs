@@ -328,7 +328,7 @@ const fn all_occupancies(
     pos: Position,
     blocker_masks: &BlockerMasksTable,
 ) -> Option<BitBoard> {
-    let blocker_mask = blocker_masks[pos.const_index()];
+    let blocker_mask = blocker_masks[pos.as_index()];
 
     let mut num_bits_set_board = 0;
     let mut board = BitBoard::empty();

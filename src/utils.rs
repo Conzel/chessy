@@ -55,7 +55,7 @@ pub fn random_board() -> BitBoard {
     BitBoard::new(rng.gen_range(std::u64::MIN..std::u64::MAX))
 }
 
-fn random_u64(r: &mut impl Rng) -> u64 {
+pub fn random_u64(r: &mut impl Rng) -> u64 {
     r.gen_range(std::u64::MIN..std::u64::MAX)
 }
 

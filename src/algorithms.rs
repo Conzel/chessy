@@ -1,35 +1,68 @@
 use crate::engine::StandardEngine;
 use crate::game_state::*;
 use crate::moves::{Move, MoveType};
-use std::cmp::{max, min};
+use crate::transposition_table::TranspositionCache;
+use std::cmp::max;
 
 const QUIESCENCE_SAFETY_BOUND: i32 = 200;
 const QUIESCENCE_MAX_DEPTH: u16 = 10;
+const TRANSPOSITION_TABLE_BITS: u8 = 15;
+const TRANSPOSITION_TABLE_SIZE: usize = 1 << TRANSPOSITION_TABLE_BITS;
 
 // If we used the true min, then -1 * i32::MIN = i32::MIN, due to overflow
 const ALMOST_MIN: i32 = i32::MIN + 1;
 const ALMOST_MAX: i32 = i32::MAX - 1;
 
-static mut num_nodes_visited: u64 = 0;
-static mut num_quiescent_nodes: u64 = 0;
+pub type Score = i32;
 
-pub trait AlphaBetaSearch {
-    fn score(&self, g: &GameState) -> i32;
-    /// Gives every move a heuristical score. Higher => Better
-    /// Used to determine move ordering and quiescence
-    /// (moves with high values still existing indicate
-    /// non-quiescent nodes)
-    fn move_score(m: &Move) -> i32;
+struct GameStateSummary {
+    score: Score,
+}
 
+pub struct AlphaBetaSearch<H: Heuristics> {
+    transposition_table: TranspositionCache<
+        GameState,
+        GameStateSummary,
+        TRANSPOSITION_TABLE_SIZE,
+        TRANSPOSITION_TABLE_BITS,
+    >,
+    heuristics: H,
+    num_nodes_visited: u64,
+    num_quiescent_nodes: u64,
+}
+
+// Trait for items that provide heuristics about the board.
+// Used in AlphaBetaSearch.
+pub trait Heuristics {
+    /// Returns a score of the current game state.
+    /// This should be high, if the player associated with the heuristic
+    /// object is winning, and low if her enemy is winning.
+    fn score(&self, g: &GameState) -> Score;
+    /// Tries to guess a score for a move. This doesn't have to be as
+    /// accurate, as it is only used for move preordering.
+    /// (But better accuarcy, meaning that highly rated moves lead to high
+    /// scores, significantly increase the program speed).
+    fn move_score(m: &Move) -> Score;
+
+    /// Compares moves between each other.
     fn move_cmp(lhs: &Move, rhs: &Move) -> std::cmp::Ordering {
         Self::move_score(rhs).cmp(&Self::move_score(lhs))
     }
+}
 
-    fn alphabeta(&self, engine: &StandardEngine, n: u16) -> Option<Move> {
-        unsafe {
-            num_nodes_visited = 0;
-            num_quiescent_nodes = 0;
+impl<H: Heuristics> AlphaBetaSearch<H> {
+    pub fn new(heuristics: H) -> Self {
+        AlphaBetaSearch {
+            transposition_table: TranspositionCache::new(),
+            heuristics: heuristics,
+            num_nodes_visited: 0,
+            num_quiescent_nodes: 0,
         }
+    }
+
+    pub fn search(&mut self, engine: &StandardEngine, n: u16) -> Option<Move> {
+        self.num_nodes_visited = 0;
+        self.num_quiescent_nodes = 0;
         let mut best_val = ALMOST_MIN;
         let mut best_move = None;
         let mut alpha_ = ALMOST_MIN;
@@ -40,7 +73,7 @@ pub trait AlphaBetaSearch {
         let mut moves = engine
             .gen_moves()
             .expect("Unexpected game state: Previous move was illegal");
-        moves.sort_unstable_by(Self::move_cmp);
+        moves.sort_unstable_by(H::move_cmp);
 
         for mv in moves {
             engine_copy.next(mv.clone());
@@ -59,29 +92,26 @@ pub trait AlphaBetaSearch {
             }
         }
 
-        unsafe {
-            println!(
-                "Visited: {} quiescent: {}",
-                num_nodes_visited, num_quiescent_nodes
-            );
-        }
+        // TODO: expose this better to the outside world
+        println!(
+            "Visited: {} quiescent: {}",
+            self.num_nodes_visited, self.num_quiescent_nodes
+        );
         best_move
     }
     // Implementation of quiescence search
     // <https://www.chessprogramming.org/Quiescence_Search>
     fn quiesce(
-        &self,
+        &mut self,
         engine: &mut StandardEngine,
         alpha: i32,
         beta: i32,
         sign: i32,
         n: u16,
     ) -> i32 {
-        unsafe {
-            num_quiescent_nodes += 1;
-        }
+        self.num_quiescent_nodes += 1;
 
-        let stand_pat = sign * self.score(engine.get_state());
+        let stand_pat = sign * self.heuristics.score(engine.get_state());
         if stand_pat >= beta {
             return beta;
         }
@@ -106,7 +136,7 @@ pub trait AlphaBetaSearch {
             return stand_pat;
         }
 
-        moves_reordered.sort_unstable_by(Self::move_cmp);
+        moves_reordered.sort_unstable_by(H::move_cmp);
 
         for m in moves_reordered {
             match m.kind {
@@ -132,16 +162,14 @@ pub trait AlphaBetaSearch {
 
     #[doc(hidden)]
     fn alphabeta_helper(
-        &self,
+        &mut self,
         engine: &mut StandardEngine,
         n: u16,
         alpha: i32,
         beta: i32,
         sign: i32,
     ) -> i32 {
-        unsafe {
-            num_nodes_visited += 1;
-        }
+        self.num_nodes_visited += 1;
         let moves = engine.gen_moves();
 
         // Check if previous move was illegal
@@ -162,7 +190,7 @@ pub trait AlphaBetaSearch {
             return self.quiesce(engine, alpha, beta, sign, QUIESCENCE_MAX_DEPTH);
         }
 
-        moves_reordered.sort_unstable_by(Self::move_cmp);
+        moves_reordered.sort_unstable_by(H::move_cmp);
 
         // Main part of the algorithm
         // Negamax Implemenation
