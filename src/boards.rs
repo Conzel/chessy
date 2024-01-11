@@ -268,7 +268,7 @@ impl BitBoard {
 
     #[cfg(not(any(target_arch = "x86_64")))]
     fn flip_horz(self) -> BitBoard {
-        flip_horz_const(self);
+        self.flip_horz_const()
     }
 
     // const fn version of flip_vert, a bit slower
